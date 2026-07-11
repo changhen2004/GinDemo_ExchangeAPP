@@ -1,7 +1,10 @@
 package router
 
 import (
-	"exchangeapp/controllers"
+	"exchangeapp/global"
+	internalArticle "exchangeapp/internal/article"
+	internalAuth "exchangeapp/internal/auth"
+	internalExchange "exchangeapp/internal/exchange"
 	"exchangeapp/middlewares"
 	"time"
 
@@ -12,6 +15,22 @@ import (
 
 func SetUpRouter() *gin.Engine {
 	r := gin.Default()
+
+	authHandler := internalAuth.NewHandler(
+		internalAuth.NewService(
+			internalAuth.NewRepo(global.DB),
+		),
+	)
+	articleHandler := internalArticle.NewHandler(
+		internalArticle.NewService(
+			internalArticle.NewRepo(global.DB, global.RedisDB),
+		),
+	)
+	exchangeHandler := internalExchange.NewHandler(
+		internalExchange.NewService(
+			internalExchange.NewRepo(global.DB),
+		),
+	)
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:5173"},
@@ -24,24 +43,24 @@ func SetUpRouter() *gin.Engine {
 
 	auth := r.Group("/api/auth")
 	{
-		auth.POST("/login", controllers.Login)
-		auth.POST("/register", controllers.Register)
+		auth.POST("/login", authHandler.Login)
+		auth.POST("/register", authHandler.Register)
 	}
 
 	publicAPI := r.Group("/api")
 	{
-		publicAPI.GET("/exchangeRates", controllers.GetExchangeRate)
-		publicAPI.GET("/articles", controllers.GetArticles)
-		publicAPI.GET("/articles/:id", controllers.GetArticleByID)
-		publicAPI.GET("/articles/:id/like", controllers.GetArticleLikes)
+		publicAPI.GET("/exchangeRates", exchangeHandler.GetExchangeRate)
+		publicAPI.GET("/articles", articleHandler.GetArticles)
+		publicAPI.GET("/articles/:id", articleHandler.GetArticleByID)
+		publicAPI.GET("/articles/:id/like", articleHandler.GetArticleLikes)
 	}
 
 	protectedAPI := r.Group("/api")
 	protectedAPI.Use(middlewares.AuthMiddleware())
 	{
-		protectedAPI.POST("/exchangeRates", controllers.CreateExchangeRate)
-		protectedAPI.POST("/articles", controllers.CreateArticle)
-		protectedAPI.POST("/articles/:id/like", controllers.LikeArticle)
+		protectedAPI.POST("/exchangeRates", exchangeHandler.CreateExchangeRate)
+		protectedAPI.POST("/articles", articleHandler.CreateArticle)
+		protectedAPI.POST("/articles/:id/like", articleHandler.LikeArticle)
 	}
 	return r
 }

@@ -7,19 +7,38 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type responseEnvelope struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+type errorData struct {
+	ErrorCode string `json:"errorCode"`
+}
+
+func writeError(ctx *gin.Context, status int, code int, message, errorCode string) {
+	ctx.JSON(status, responseEnvelope{
+		Code:    code,
+		Message: message,
+		Data: errorData{
+			ErrorCode: errorCode,
+		},
+	})
+}
+
 func AuthMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		// Check if the request has an Authorization header
 		token := ctx.GetHeader("Authorization")
 		if token == "" {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is missing"})
+			writeError(ctx, http.StatusUnauthorized, 10002, "Authorization header is missing", "UNAUTHORIZED")
 			ctx.Abort()
 			return
 		}
-		// Parse the JWT token
+
 		username, err := utils.ParseJWT(token)
 		if err != nil {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			writeError(ctx, http.StatusUnauthorized, 10002, err.Error(), "UNAUTHORIZED")
 			ctx.Abort()
 			return
 		}
