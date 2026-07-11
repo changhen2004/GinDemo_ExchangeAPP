@@ -3,7 +3,9 @@ package app
 import (
 	internalArticle "exchangeapp/internal/article"
 	internalAuth "exchangeapp/internal/auth"
+	internalComment "exchangeapp/internal/comment"
 	internalExchange "exchangeapp/internal/exchange"
+	internalFavorite "exchangeapp/internal/favorite"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -30,15 +32,25 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 			internalArticle.NewRepo(deps.DB, deps.RedisDB),
 		),
 	)
+	commentHandler := internalComment.NewHandler(
+		internalComment.NewService(
+			internalComment.NewRepo(deps.DB),
+		),
+	)
 	exchangeHandler := internalExchange.NewHandler(
 		internalExchange.NewService(
 			internalExchange.NewRepo(deps.DB),
 		),
 	)
+	favoriteHandler := internalFavorite.NewHandler(
+		internalFavorite.NewService(
+			internalFavorite.NewRepo(deps.DB),
+		),
+	)
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:5173"},
-		AllowMethods:     []string{"PUT", "PATCH", "GET", "POST"},
+		AllowMethods:     []string{"PUT", "PATCH", "GET", "POST", "DELETE"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
@@ -57,6 +69,7 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 		publicAPI.GET("/articles", articleHandler.GetArticles)
 		publicAPI.GET("/articles/:id", articleHandler.GetArticleByID)
 		publicAPI.GET("/articles/:id/like", articleHandler.GetArticleLikes)
+		publicAPI.GET("/articles/:id/comments", commentHandler.GetComments)
 	}
 
 	protectedAPI := r.Group("/api")
@@ -65,6 +78,11 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 		protectedAPI.POST("/exchangeRates", exchangeHandler.CreateExchangeRate)
 		protectedAPI.POST("/articles", articleHandler.CreateArticle)
 		protectedAPI.POST("/articles/:id/like", articleHandler.LikeArticle)
+		protectedAPI.POST("/articles/:id/comments", commentHandler.CreateComment)
+		protectedAPI.DELETE("/comments/:id", commentHandler.DeleteComment)
+		protectedAPI.POST("/articles/:id/favorite", favoriteHandler.CreateFavorite)
+		protectedAPI.DELETE("/articles/:id/favorite", favoriteHandler.DeleteFavorite)
+		protectedAPI.GET("/me/favorites", favoriteHandler.ListMyFavorites)
 	}
 	return r
 }
