@@ -1,18 +1,23 @@
 package favorite
 
 import (
+	"context"
+	"strconv"
 	"strings"
 	"time"
 
+	"exchangeapp/internal/cachekey"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type Repo struct {
-	db *gorm.DB
+	db      *gorm.DB
+	redisDB *redis.Client
 }
 
-func NewRepo(db *gorm.DB) *Repo {
-	return &Repo{db: db}
+func NewRepo(db *gorm.DB, redisDB *redis.Client) *Repo {
+	return &Repo{db: db, redisDB: redisDB}
 }
 
 func (r *Repo) ArticleExists(articleID uint) (bool, error) {
@@ -127,4 +132,10 @@ func splitTags(tags string) []string {
 		return []string{}
 	}
 	return strings.Split(tags, ",")
+}
+
+func (r *Repo) InvalidateArticleCaches(ctx context.Context, articleID uint) {
+	cachekey.DeleteByPrefix(ctx, r.redisDB, cachekey.ArticleListPrefix)
+	cachekey.DeleteByPrefix(ctx, r.redisDB, cachekey.ArticleHotPrefix)
+	cachekey.DeleteKeys(ctx, r.redisDB, cachekey.ArticleDetailKey(strconv.FormatUint(uint64(articleID), 10)))
 }

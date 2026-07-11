@@ -1,15 +1,19 @@
 package points
 
 import (
+	"context"
 	"time"
 
 	internalAuth "exchangeapp/internal/auth"
+	"exchangeapp/internal/cachekey"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type Repo struct {
-	db *gorm.DB
+	db      *gorm.DB
+	redisDB *redis.Client
 }
 
 type articleRecord struct {
@@ -29,8 +33,8 @@ func (articleUnlockRecord) TableName() string {
 	return "article_unlocks"
 }
 
-func NewRepo(db *gorm.DB) *Repo {
-	return &Repo{db: db}
+func NewRepo(db *gorm.DB, redisDB *redis.Client) *Repo {
+	return &Repo{db: db, redisDB: redisDB}
 }
 
 func (r *Repo) GetUserByID(userID uint) (*internalAuth.User, error) {
@@ -39,6 +43,24 @@ func (r *Repo) GetUserByID(userID uint) (*internalAuth.User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *Repo) GetSummaryCache(ctx context.Context, key string) (string, error) {
+	if r.redisDB == nil {
+		return "", redis.Nil
+	}
+	return r.redisDB.Get(ctx, key).Result()
+}
+
+func (r *Repo) SetSummaryCache(ctx context.Context, key, value string) {
+	if r.redisDB == nil {
+		return
+	}
+	_ = r.redisDB.Set(ctx, key, value, cachekey.PointsSummaryTTL).Err()
+}
+
+func (r *Repo) DeleteSummaryCache(ctx context.Context, userID uint) {
+	cachekey.DeleteKeys(ctx, r.redisDB, cachekey.PointsSummaryKey(userID))
 }
 
 func (r *Repo) ListPrivileges(userID uint) ([]UserPrivilegeResponse, error) {
@@ -117,6 +139,7 @@ func (r *Repo) AwardPoints(userID uint, amount uint, source, referenceType strin
 			Description:   description,
 		}).Error
 	})
+	r.DeleteSummaryCache(context.Background(), userID)
 	return balance, err
 }
 
@@ -153,6 +176,7 @@ func (r *Repo) CreateCheckInAndAward(userID uint, date string, amount uint, desc
 			Description:   description,
 		}).Error
 	})
+	r.DeleteSummaryCache(context.Background(), userID)
 	return balance, err
 }
 
@@ -194,6 +218,7 @@ func (r *Repo) UnlockArticle(userID, articleID uint, requiredPoints uint) (uint,
 			Description:   "unlock paid resource",
 		}).Error
 	})
+	r.DeleteSummaryCache(context.Background(), userID)
 	return balance, err
 }
 
@@ -233,6 +258,7 @@ func (r *Repo) RedeemPrivilege(userID uint, privilegeKey string, cost uint) (uin
 			Description:   "redeem privilege " + privilegeKey,
 		}).Error
 	})
+	r.DeleteSummaryCache(context.Background(), userID)
 	return balance, err
 }
 

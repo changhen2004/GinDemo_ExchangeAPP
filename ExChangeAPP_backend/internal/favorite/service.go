@@ -1,6 +1,9 @@
 package favorite
 
-import "strconv"
+import (
+	"context"
+	"strconv"
+)
 
 type Service struct {
 	repo *Repo
@@ -36,6 +39,7 @@ func (s *Service) Create(articleID string, userID uint) (FavoriteActionResponse,
 	if err != nil {
 		return FavoriteActionResponse{}, err
 	}
+	s.repo.InvalidateArticleCaches(context.Background(), uint(parsedArticleID))
 
 	return FavoriteActionResponse{
 		Message:       "article favorited successfully",
@@ -61,6 +65,7 @@ func (s *Service) Delete(articleID string, userID uint) (FavoriteActionResponse,
 	if err != nil {
 		return FavoriteActionResponse{}, err
 	}
+	s.repo.InvalidateArticleCaches(context.Background(), uint(parsedArticleID))
 
 	return FavoriteActionResponse{
 		Message:       "article unfavorited successfully",

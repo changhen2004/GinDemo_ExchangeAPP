@@ -1,10 +1,13 @@
 package points
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
 
+	"exchangeapp/internal/cachekey"
 	"gorm.io/gorm"
 )
 
@@ -28,6 +31,15 @@ func NewService(repo *Repo) *Service {
 }
 
 func (s *Service) GetSummary(userID uint) (PointsSummaryResponse, error) {
+	cacheKey := cachekey.PointsSummaryKey(userID)
+	cached, err := s.repo.GetSummaryCache(context.Background(), cacheKey)
+	if err == nil {
+		var response PointsSummaryResponse
+		if unmarshalErr := json.Unmarshal([]byte(cached), &response); unmarshalErr == nil {
+			return response, nil
+		}
+	}
+
 	user, err := s.repo.GetUserByID(userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -41,10 +53,14 @@ func (s *Service) GetSummary(userID uint) (PointsSummaryResponse, error) {
 		return PointsSummaryResponse{}, err
 	}
 
-	return PointsSummaryResponse{
+	response := PointsSummaryResponse{
 		Balance:    user.Points,
 		Privileges: privileges,
-	}, nil
+	}
+	if payload, marshalErr := json.Marshal(response); marshalErr == nil {
+		s.repo.SetSummaryCache(context.Background(), cacheKey, string(payload))
+	}
+	return response, nil
 }
 
 func (s *Service) ListRecords(userID uint) ([]PointsRecordResponse, error) {

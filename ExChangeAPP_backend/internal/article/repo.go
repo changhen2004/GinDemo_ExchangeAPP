@@ -4,7 +4,9 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
+	"exchangeapp/internal/cachekey"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -92,18 +94,7 @@ func (r *Repo) HasUnlocked(articleID, userID uint) (bool, error) {
 }
 
 func (r *Repo) DeleteArticlesCacheByPrefix(ctx context.Context, prefix string) {
-	if r.redisDB == nil {
-		return
-	}
-
-	iter := r.redisDB.Scan(ctx, 0, prefix+"*", 0).Iterator()
-	keys := make([]string, 0)
-	for iter.Next(ctx) {
-		keys = append(keys, iter.Val())
-	}
-	if len(keys) > 0 {
-		_ = r.redisDB.Del(ctx, keys...).Err()
-	}
+	cachekey.DeleteByPrefix(ctx, r.redisDB, prefix)
 }
 
 func (r *Repo) GetArticlesCache(ctx context.Context, key string) (string, error) {
@@ -113,11 +104,15 @@ func (r *Repo) GetArticlesCache(ctx context.Context, key string) (string, error)
 	return r.redisDB.Get(ctx, key).Result()
 }
 
-func (r *Repo) SetArticlesCache(ctx context.Context, key, value string) {
+func (r *Repo) SetArticlesCache(ctx context.Context, key, value string, ttl time.Duration) {
 	if r.redisDB == nil {
 		return
 	}
-	_ = r.redisDB.Set(ctx, key, value, 0).Err()
+	_ = r.redisDB.Set(ctx, key, value, ttl).Err()
+}
+
+func (r *Repo) DeleteArticleCacheKeys(ctx context.Context, keys ...string) {
+	cachekey.DeleteKeys(ctx, r.redisDB, keys...)
 }
 
 func (r *Repo) IncrementLike(ctx context.Context, articleID string) (int, error) {

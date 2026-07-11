@@ -30,7 +30,7 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 		),
 	)
 	pointsService := internalPoints.NewService(
-		internalPoints.NewRepo(deps.DB),
+		internalPoints.NewRepo(deps.DB, deps.RedisDB),
 	)
 	pointsHandler := internalPoints.NewHandler(pointsService)
 	articleHandler := internalArticle.NewHandler(
@@ -52,7 +52,7 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 	)
 	favoriteHandler := internalFavorite.NewHandler(
 		internalFavorite.NewService(
-			internalFavorite.NewRepo(deps.DB),
+			internalFavorite.NewRepo(deps.DB, deps.RedisDB),
 		),
 	)
 	mediaHandler := internalMedia.NewHandler(
@@ -79,6 +79,7 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 	{
 		publicAPI.GET("/exchangeRates", exchangeHandler.GetExchangeRate)
 		publicAPI.GET("/articles", articleHandler.GetArticles)
+		publicAPI.GET("/articles/hot", articleHandler.GetHotArticles)
 		publicAPI.GET("/articles/:id", articleHandler.GetArticleByID)
 		publicAPI.GET("/articles/:id/like", articleHandler.GetArticleLikes)
 		publicAPI.GET("/articles/:id/comments", commentHandler.GetComments)

@@ -4,14 +4,30 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"time"
 
+	"exchangeapp/internal/cachekey"
 	internalMedia "exchangeapp/internal/media"
 	internalPoints "exchangeapp/internal/points"
 	"gorm.io/gorm"
 )
 
-const CacheKeyPrefix = "articles:list:"
+type articleDetailCachePayload struct {
+	ID             uint                  `json:"id"`
+	Title          string                `json:"title"`
+	Content        string                `json:"content"`
+	Preview        string                `json:"preview"`
+	CoverURL       string                `json:"coverUrl"`
+	ContentImages  []string              `json:"contentImages"`
+	Tags           []string              `json:"tags"`
+	Status         string                `json:"status"`
+	Author         ArticleAuthorResponse `json:"author"`
+	Stats          ArticleStatsResponse  `json:"stats"`
+	IsFree         bool                  `json:"isFree"`
+	RequiredPoints uint                  `json:"requiredPoints"`
+	CreatedAt      time.Time             `json:"createdAt"`
+	UpdatedAt      time.Time             `json:"updatedAt"`
+}
 
 type Service struct {
 	repo          *Repo
@@ -58,13 +74,14 @@ func (s *Service) Create(ctx context.Context, req CreateArticleRequest) (Article
 			return ArticleResponse{}, err
 		}
 	}
-	s.repo.DeleteArticlesCacheByPrefix(ctx, CacheKeyPrefix)
+	s.repo.DeleteArticlesCacheByPrefix(ctx, cachekey.ArticleListPrefix)
+	s.repo.DeleteArticlesCacheByPrefix(ctx, cachekey.ArticleHotPrefix)
 
 	return toArticleResponse(*article), nil
 }
 
 func (s *Service) List(ctx context.Context, query ListArticlesQuery) ([]ArticleResponse, error) {
-	cacheKey := buildListCacheKey(query)
+	cacheKey := cachekey.ArticleListKey(query.Page, query.PageSize, query.Sort, query.Keyword, query.Tag)
 	cached, err := s.repo.GetArticlesCache(ctx, cacheKey)
 	if err == nil {
 		var responses []ArticleResponse
@@ -80,7 +97,7 @@ func (s *Service) List(ctx context.Context, query ListArticlesQuery) ([]ArticleR
 
 	responses := toArticleResponses(articles)
 	if payload, marshalErr := json.Marshal(responses); marshalErr == nil {
-		s.repo.SetArticlesCache(ctx, cacheKey, string(payload))
+		s.repo.SetArticlesCache(ctx, cacheKey, string(payload), cachekey.ArticleListTTL)
 	}
 	return responses, nil
 }
@@ -95,6 +112,24 @@ func (s *Service) FindByID(id string) (ArticleResponse, error) {
 }
 
 func (s *Service) GetDetail(id string, currentUserID uint) (ArticleDetailResponse, error) {
+	cacheKey := cachekey.ArticleDetailKey(id)
+	cached, err := s.repo.GetArticlesCache(context.Background(), cacheKey)
+	if err == nil {
+		var payload articleDetailCachePayload
+		if unmarshalErr := json.Unmarshal([]byte(cached), &payload); unmarshalErr == nil {
+			isUnlocked, unlockErr := s.resolveUnlockStatus(Article{
+				Model:          gorm.Model{ID: payload.ID},
+				AuthorID:       payload.Author.ID,
+				IsFree:         payload.IsFree,
+				RequiredPoints: payload.RequiredPoints,
+			}, currentUserID)
+			if unlockErr != nil {
+				return ArticleDetailResponse{}, unlockErr
+			}
+			return payload.toResponse(isUnlocked), nil
+		}
+	}
+
 	article, err := s.repo.FindByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -117,7 +152,11 @@ func (s *Service) GetDetail(id string, currentUserID uint) (ArticleDetailRespons
 		return ArticleDetailResponse{}, err
 	}
 
-	return toArticleDetailResponse(*article, author, isUnlocked), nil
+	response := toArticleDetailResponse(*article, author, isUnlocked)
+	if payload, marshalErr := json.Marshal(newArticleDetailCachePayload(response)); marshalErr == nil {
+		s.repo.SetArticlesCache(context.Background(), cacheKey, string(payload), cachekey.ArticleDetailTTL)
+	}
+	return response, nil
 }
 
 func (s *Service) Like(ctx context.Context, articleID string) (LikeActionResponse, error) {
@@ -125,6 +164,9 @@ func (s *Service) Like(ctx context.Context, articleID string) (LikeActionRespons
 	if err != nil {
 		return LikeActionResponse{}, err
 	}
+	s.repo.DeleteArticlesCacheByPrefix(ctx, cachekey.ArticleListPrefix)
+	s.repo.DeleteArticlesCacheByPrefix(ctx, cachekey.ArticleHotPrefix)
+	s.repo.DeleteArticleCacheKeys(ctx, cachekey.ArticleDetailKey(articleID))
 
 	return LikeActionResponse{
 		Message: "Article liked successfully",
@@ -140,16 +182,32 @@ func (s *Service) GetLikes(ctx context.Context, articleID string) (LikeResponse,
 	return LikeResponse{Likes: likes}, nil
 }
 
-func buildListCacheKey(query ListArticlesQuery) string {
-	return fmt.Sprintf(
-		"%spage=%d:size=%d:sort=%s:keyword=%s:tag=%s",
-		CacheKeyPrefix,
-		query.Page,
-		query.PageSize,
-		query.Sort,
-		query.Keyword,
-		query.Tag,
-	)
+func (s *Service) ListHot(ctx context.Context, limit int) ([]ArticleResponse, error) {
+	if limit < 1 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	cacheKey := cachekey.ArticleHotKey(limit)
+	cached, err := s.repo.GetArticlesCache(ctx, cacheKey)
+	if err == nil {
+		var responses []ArticleResponse
+		if unmarshalErr := json.Unmarshal([]byte(cached), &responses); unmarshalErr == nil {
+			return responses, nil
+		}
+	}
+
+	articles, err := s.repo.List(NewListArticlesQuery(1, limit, "hot", "", ""))
+	if err != nil {
+		return nil, err
+	}
+	responses := toArticleResponses(articles)
+	if payload, marshalErr := json.Marshal(responses); marshalErr == nil {
+		s.repo.SetArticlesCache(ctx, cacheKey, string(payload), cachekey.ArticleHotTTL)
+	}
+	return responses, nil
 }
 
 func (s *Service) resolveUnlockStatus(article Article, currentUserID uint) (bool, error) {
@@ -176,4 +234,43 @@ func userIDFromContext(ctx context.Context) uint {
 		return 0
 	}
 	return userID
+}
+
+func newArticleDetailCachePayload(detail ArticleDetailResponse) articleDetailCachePayload {
+	return articleDetailCachePayload{
+		ID:             detail.ID,
+		Title:          detail.Title,
+		Content:        detail.Content,
+		Preview:        detail.Preview,
+		CoverURL:       detail.CoverURL,
+		ContentImages:  detail.ContentImages,
+		Tags:           detail.Tags,
+		Status:         detail.Status,
+		Author:         detail.Author,
+		Stats:          detail.Stats,
+		IsFree:         detail.IsFree,
+		RequiredPoints: detail.RequiredPoints,
+		CreatedAt:      detail.CreatedAt,
+		UpdatedAt:      detail.UpdatedAt,
+	}
+}
+
+func (p articleDetailCachePayload) toResponse(isUnlocked bool) ArticleDetailResponse {
+	return ArticleDetailResponse{
+		ID:             p.ID,
+		Title:          p.Title,
+		Content:        p.Content,
+		Preview:        p.Preview,
+		CoverURL:       p.CoverURL,
+		ContentImages:  p.ContentImages,
+		Tags:           p.Tags,
+		Status:         p.Status,
+		Author:         p.Author,
+		Stats:          p.Stats,
+		IsFree:         p.IsFree,
+		RequiredPoints: p.RequiredPoints,
+		IsUnlocked:     isUnlocked,
+		CreatedAt:      p.CreatedAt,
+		UpdatedAt:      p.UpdatedAt,
+	}
 }
