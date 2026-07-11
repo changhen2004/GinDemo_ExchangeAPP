@@ -12,6 +12,7 @@ func Migrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&auth.User{},
 		&article.Article{},
+		&article.ArticleUnlock{},
 		&exchange.ExchangeRate{},
 	)
 }

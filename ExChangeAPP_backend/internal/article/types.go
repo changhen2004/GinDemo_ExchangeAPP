@@ -6,11 +6,13 @@ import (
 )
 
 type CreateArticleRequest struct {
-	Title   string   `json:"title" binding:"required,max=200"`
-	Content string   `json:"content" binding:"required"`
-	Preview string   `json:"preview" binding:"required,max=500"`
-	Tags    []string `json:"tags"`
-	Status  string   `json:"status" binding:"omitempty,oneof=draft published archived"`
+	Title          string   `json:"title" binding:"required,max=200"`
+	Content        string   `json:"content" binding:"required"`
+	Preview        string   `json:"preview" binding:"required,max=500"`
+	Tags           []string `json:"tags"`
+	Status         string   `json:"status" binding:"omitempty,oneof=draft published archived"`
+	IsFree         *bool    `json:"isFree"`
+	RequiredPoints uint     `json:"requiredPoints"`
 }
 
 type ListArticlesQuery struct {
@@ -22,17 +24,47 @@ type ListArticlesQuery struct {
 }
 
 type ArticleResponse struct {
-	ID        uint      `json:"id"`
-	AuthorID  uint      `json:"authorId"`
-	Title     string    `json:"title"`
-	Content   string    `json:"content"`
-	Preview   string    `json:"preview"`
-	Tags      []string  `json:"tags"`
-	Status    string    `json:"status"`
-	ViewCount uint      `json:"viewCount"`
-	LikeCount uint      `json:"likeCount"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID             uint      `json:"id"`
+	AuthorID       uint      `json:"authorId"`
+	Title          string    `json:"title"`
+	Content        string    `json:"content"`
+	Preview        string    `json:"preview"`
+	Tags           []string  `json:"tags"`
+	Status         string    `json:"status"`
+	ViewCount      uint      `json:"viewCount"`
+	LikeCount      uint      `json:"likeCount"`
+	FavoriteCount  uint      `json:"favoriteCount"`
+	IsFree         bool      `json:"isFree"`
+	RequiredPoints uint      `json:"requiredPoints"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
+type ArticleAuthorResponse struct {
+	ID       uint   `json:"id"`
+	Username string `json:"username"`
+}
+
+type ArticleStatsResponse struct {
+	ViewCount     uint `json:"viewCount"`
+	LikeCount     uint `json:"likeCount"`
+	FavoriteCount uint `json:"favoriteCount"`
+}
+
+type ArticleDetailResponse struct {
+	ID             uint                  `json:"id"`
+	Title          string                `json:"title"`
+	Content        string                `json:"content"`
+	Preview        string                `json:"preview"`
+	Tags           []string              `json:"tags"`
+	Status         string                `json:"status"`
+	Author         ArticleAuthorResponse `json:"author"`
+	Stats          ArticleStatsResponse  `json:"stats"`
+	IsFree         bool                  `json:"isFree"`
+	RequiredPoints uint                  `json:"requiredPoints"`
+	IsUnlocked     bool                  `json:"isUnlocked"`
+	CreatedAt      time.Time             `json:"createdAt"`
+	UpdatedAt      time.Time             `json:"updatedAt"`
 }
 
 type LikeResponse struct {
@@ -46,17 +78,20 @@ type LikeActionResponse struct {
 
 func toArticleResponse(article Article) ArticleResponse {
 	return ArticleResponse{
-		ID:        article.ID,
-		AuthorID:  article.AuthorID,
-		Title:     article.Title,
-		Content:   article.Content,
-		Preview:   article.Preview,
-		Tags:      splitTags(article.Tags),
-		Status:    article.Status,
-		ViewCount: article.ViewCount,
-		LikeCount: article.LikeCount,
-		CreatedAt: article.CreatedAt,
-		UpdatedAt: article.UpdatedAt,
+		ID:             article.ID,
+		AuthorID:       article.AuthorID,
+		Title:          article.Title,
+		Content:        article.Content,
+		Preview:        article.Preview,
+		Tags:           splitTags(article.Tags),
+		Status:         article.Status,
+		ViewCount:      article.ViewCount,
+		LikeCount:      article.LikeCount,
+		FavoriteCount:  article.FavoriteCount,
+		IsFree:         article.IsFree,
+		RequiredPoints: article.RequiredPoints,
+		CreatedAt:      article.CreatedAt,
+		UpdatedAt:      article.UpdatedAt,
 	}
 }
 
@@ -124,4 +159,26 @@ func splitTags(tags string) []string {
 		return []string{}
 	}
 	return strings.Split(tags, ",")
+}
+
+func toArticleDetailResponse(article Article, author ArticleAuthorResponse, isUnlocked bool) ArticleDetailResponse {
+	return ArticleDetailResponse{
+		ID:      article.ID,
+		Title:   article.Title,
+		Content: article.Content,
+		Preview: article.Preview,
+		Tags:    splitTags(article.Tags),
+		Status:  article.Status,
+		Author:  author,
+		Stats: ArticleStatsResponse{
+			ViewCount:     article.ViewCount,
+			LikeCount:     article.LikeCount,
+			FavoriteCount: article.FavoriteCount,
+		},
+		IsFree:         article.IsFree,
+		RequiredPoints: article.RequiredPoints,
+		IsUnlocked:     isUnlocked,
+		CreatedAt:      article.CreatedAt,
+		UpdatedAt:      article.UpdatedAt,
+	}
 }

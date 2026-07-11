@@ -3,7 +3,10 @@ package article
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+
+	"gorm.io/gorm"
 )
 
 const CacheKeyPrefix = "articles:list:"
@@ -17,12 +20,23 @@ func NewService(repo *Repo) *Service {
 }
 
 func (s *Service) Create(ctx context.Context, req CreateArticleRequest) (ArticleResponse, error) {
+	isFree := true
+	if req.IsFree != nil {
+		isFree = *req.IsFree
+	}
+	if req.RequiredPoints > 0 {
+		isFree = false
+	}
+
 	article := &Article{
-		Title:   req.Title,
-		Content: req.Content,
-		Preview: req.Preview,
-		Tags:    joinTags(req.Tags),
-		Status:  req.Status,
+		AuthorID:       userIDFromContext(ctx),
+		Title:          req.Title,
+		Content:        req.Content,
+		Preview:        req.Preview,
+		Tags:           joinTags(req.Tags),
+		Status:         req.Status,
+		IsFree:         isFree,
+		RequiredPoints: req.RequiredPoints,
 	}
 	if article.Status == "" {
 		article.Status = "draft"
@@ -67,6 +81,32 @@ func (s *Service) FindByID(id string) (ArticleResponse, error) {
 	return toArticleResponse(*article), nil
 }
 
+func (s *Service) GetDetail(id string, currentUserID uint) (ArticleDetailResponse, error) {
+	article, err := s.repo.FindByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ArticleDetailResponse{}, ErrArticleNotFound
+		}
+		return ArticleDetailResponse{}, err
+	}
+
+	author, err := s.repo.FindAuthorByID(article.AuthorID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			author = ArticleAuthorResponse{}
+		} else {
+			return ArticleDetailResponse{}, err
+		}
+	}
+
+	isUnlocked, err := s.resolveUnlockStatus(*article, currentUserID)
+	if err != nil {
+		return ArticleDetailResponse{}, err
+	}
+
+	return toArticleDetailResponse(*article, author, isUnlocked), nil
+}
+
 func (s *Service) Like(ctx context.Context, articleID string) (LikeActionResponse, error) {
 	likes, err := s.repo.IncrementLike(ctx, articleID)
 	if err != nil {
@@ -97,4 +137,30 @@ func buildListCacheKey(query ListArticlesQuery) string {
 		query.Keyword,
 		query.Tag,
 	)
+}
+
+func (s *Service) resolveUnlockStatus(article Article, currentUserID uint) (bool, error) {
+	if article.IsFree || article.RequiredPoints == 0 {
+		return true, nil
+	}
+	if currentUserID == 0 {
+		return false, nil
+	}
+	if article.AuthorID == currentUserID {
+		return true, nil
+	}
+	return s.repo.HasUnlocked(article.ID, currentUserID)
+}
+
+func userIDFromContext(ctx context.Context) uint {
+	if ctx == nil {
+		return 0
+	}
+
+	value := ctx.Value("userID")
+	userID, ok := value.(uint)
+	if !ok {
+		return 0
+	}
+	return userID
 }

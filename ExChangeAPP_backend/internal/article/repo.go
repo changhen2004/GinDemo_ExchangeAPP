@@ -14,6 +14,11 @@ type Repo struct {
 	redisDB *redis.Client
 }
 
+type articleAuthor struct {
+	ID       uint
+	Username string
+}
+
 func NewRepo(db *gorm.DB, redisDB *redis.Client) *Repo {
 	return &Repo{db: db, redisDB: redisDB}
 }
@@ -53,6 +58,37 @@ func (r *Repo) FindByID(id string) (*Article, error) {
 		return nil, err
 	}
 	return &article, nil
+}
+
+func (r *Repo) FindAuthorByID(authorID uint) (ArticleAuthorResponse, error) {
+	if authorID == 0 {
+		return ArticleAuthorResponse{}, nil
+	}
+
+	var author articleAuthor
+	if err := r.db.Table("users").Select("id, username").Where("id = ?", authorID).Take(&author).Error; err != nil {
+		return ArticleAuthorResponse{}, err
+	}
+
+	return ArticleAuthorResponse{
+		ID:       author.ID,
+		Username: author.Username,
+	}, nil
+}
+
+func (r *Repo) HasUnlocked(articleID, userID uint) (bool, error) {
+	if articleID == 0 || userID == 0 {
+		return false, nil
+	}
+
+	var count int64
+	if err := r.db.Model(&ArticleUnlock{}).
+		Where("article_id = ? AND user_id = ?", articleID, userID).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
 }
 
 func (r *Repo) DeleteArticlesCacheByPrefix(ctx context.Context, prefix string) {
