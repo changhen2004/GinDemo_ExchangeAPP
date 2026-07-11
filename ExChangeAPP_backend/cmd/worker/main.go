@@ -34,8 +34,9 @@ func main() {
 	pointsService := points.NewService(points.NewRepo(db, redisClient))
 	articleService := article.NewService(article.NewRepo(db, redisClient), nil, pointsService)
 	processor := internalWorker.NewProcessor(articleService, pointsService)
+	idemStore := internalWorker.NewRedisIdempotencyStore(redisClient)
 
-	worker, err := internalWorker.NewRunner(rabbitConn, cfg.RabbitMQ.Exchange, cfg.RabbitMQ.Queue, processor)
+	worker, err := internalWorker.NewRunner(rabbitConn, cfg.RabbitMQ.Exchange, cfg.RabbitMQ.Queue, processor, idemStore)
 	if err != nil {
 		log.Fatalf("init async worker: %v", err)
 	}

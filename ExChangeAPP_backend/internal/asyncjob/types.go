@@ -1,5 +1,7 @@
 package asyncjob
 
+import "time"
+
 type Type string
 
 const (
@@ -13,6 +15,8 @@ const (
 )
 
 type Job struct {
-	Type    Type            `json:"type"`
-	Payload map[string]uint `json:"payload"`
+	ID        string          `json:"id"`
+	Type      Type            `json:"type"`
+	Payload   map[string]uint `json:"payload"`
+	CreatedAt time.Time       `json:"createdAt"`
 }

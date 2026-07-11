@@ -13,11 +13,12 @@ import (
 
 type Runner struct {
 	channel   *amqp.Channel
+	idemStore IdempotencyStore
 	queue     string
 	processor *Processor
 }
 
-func NewRunner(conn *amqp.Connection, exchange, queue string, processor *Processor) (*Runner, error) {
+func NewRunner(conn *amqp.Connection, exchange, queue string, processor *Processor, idemStore IdempotencyStore) (*Runner, error) {
 	ch, err := conn.Channel()
 	if err != nil {
 		return nil, err
@@ -36,8 +37,13 @@ func NewRunner(conn *amqp.Connection, exchange, queue string, processor *Process
 		return nil, err
 	}
 
+	if idemStore == nil {
+		idemStore = NoopIdempotencyStore{}
+	}
+
 	return &Runner{
 		channel:   ch,
+		idemStore: idemStore,
 		queue:     queue,
 		processor: processor,
 	}, nil
@@ -65,8 +71,25 @@ func (w *Runner) Run(ctx context.Context) error {
 				continue
 			}
 
+			ok, err := w.idemStore.Begin(ctx, job.ID)
+			if err != nil {
+				log.Printf("idempotency begin failed: jobID=%s err=%v", job.ID, err)
+				_ = msg.Nack(false, true)
+				continue
+			}
+			if !ok {
+				_ = msg.Ack(false)
+				continue
+			}
+
 			if err := w.processor.Handle(ctx, job); err != nil {
 				log.Printf("process async job failed: type=%s err=%v", job.Type, err)
+				_ = msg.Nack(false, true)
+				continue
+			}
+
+			if err := w.idemStore.Complete(ctx, job.ID); err != nil {
+				log.Printf("idempotency complete failed: jobID=%s err=%v", job.ID, err)
 				_ = msg.Nack(false, true)
 				continue
 			}

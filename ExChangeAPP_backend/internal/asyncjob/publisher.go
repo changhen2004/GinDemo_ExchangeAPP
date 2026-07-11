@@ -3,7 +3,9 @@ package asyncjob
 import (
 	"context"
 	"encoding/json"
+	"time"
 
+	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -50,6 +52,13 @@ func NewRabbitPublisher(conn *amqp.Connection, exchange, queue string) (*RabbitP
 }
 
 func (p *RabbitPublisher) Publish(ctx context.Context, job Job) error {
+	if job.ID == "" {
+		job.ID = uuid.NewString()
+	}
+	if job.CreatedAt.IsZero() {
+		job.CreatedAt = time.Now().UTC()
+	}
+
 	body, err := json.Marshal(job)
 	if err != nil {
 		return err
