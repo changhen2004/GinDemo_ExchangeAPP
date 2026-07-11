@@ -72,8 +72,8 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 
 	auth := r.Group("/api/auth")
 	{
-		auth.POST("/login", authHandler.Login)
-		auth.POST("/register", authHandler.Register)
+		auth.POST("/login", RateLimitMiddleware(deps.RedisDB, loginRateLimitRule), authHandler.Login)
+		auth.POST("/register", RateLimitMiddleware(deps.RedisDB, registerRateLimitRule), authHandler.Register)
 		auth.POST("/refresh", authHandler.Refresh)
 	}
 
@@ -91,11 +91,11 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 	protectedAPI.Use(AuthMiddleware(authService))
 	{
 		protectedAPI.POST("/auth/logout", authHandler.Logout)
-		protectedAPI.POST("/exchangeRates", exchangeHandler.CreateExchangeRate)
-		protectedAPI.POST("/articles", articleHandler.CreateArticle)
+		protectedAPI.POST("/exchangeRates", RateLimitMiddleware(deps.RedisDB, publishRateLimitRule), exchangeHandler.CreateExchangeRate)
+		protectedAPI.POST("/articles", RateLimitMiddleware(deps.RedisDB, publishRateLimitRule), articleHandler.CreateArticle)
 		protectedAPI.POST("/articles/:id/like", articleHandler.LikeArticle)
 		protectedAPI.POST("/articles/:id/unlock", pointsHandler.UnlockArticle)
-		protectedAPI.POST("/articles/:id/comments", commentHandler.CreateComment)
+		protectedAPI.POST("/articles/:id/comments", RateLimitMiddleware(deps.RedisDB, commentRateLimitRule), commentHandler.CreateComment)
 		protectedAPI.DELETE("/comments/:id", commentHandler.DeleteComment)
 		protectedAPI.POST("/articles/:id/favorite", favoriteHandler.CreateFavorite)
 		protectedAPI.DELETE("/articles/:id/favorite", favoriteHandler.DeleteFavorite)
@@ -104,7 +104,7 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 		protectedAPI.GET("/me/favorites", favoriteHandler.ListMyFavorites)
 		protectedAPI.GET("/me/points", pointsHandler.GetMyPoints)
 		protectedAPI.GET("/me/points/records", pointsHandler.GetMyPointsRecords)
-		protectedAPI.POST("/me/check-in", pointsHandler.CheckIn)
+		protectedAPI.POST("/me/check-in", RateLimitMiddleware(deps.RedisDB, checkInRateLimitRule), pointsHandler.CheckIn)
 		protectedAPI.POST("/me/points/redeem", pointsHandler.RedeemPrivilege)
 	}
 	return r
