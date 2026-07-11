@@ -6,6 +6,7 @@ import (
 	"exchangeapp/internal/comment"
 	"exchangeapp/internal/exchange"
 	"exchangeapp/internal/favorite"
+	"exchangeapp/internal/points"
 
 	"gorm.io/gorm"
 )
@@ -18,5 +19,8 @@ func Migrate(db *gorm.DB) error {
 		&comment.Comment{},
 		&exchange.ExchangeRate{},
 		&favorite.Favorite{},
+		&points.PointLedger{},
+		&points.UserCheckIn{},
+		&points.UserPrivilege{},
 	)
 }

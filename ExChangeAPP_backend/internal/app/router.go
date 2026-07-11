@@ -6,6 +6,7 @@ import (
 	internalComment "exchangeapp/internal/comment"
 	internalExchange "exchangeapp/internal/exchange"
 	internalFavorite "exchangeapp/internal/favorite"
+	internalPoints "exchangeapp/internal/points"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -27,14 +28,20 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 			internalAuth.NewRepo(deps.DB),
 		),
 	)
+	pointsService := internalPoints.NewService(
+		internalPoints.NewRepo(deps.DB),
+	)
+	pointsHandler := internalPoints.NewHandler(pointsService)
 	articleHandler := internalArticle.NewHandler(
 		internalArticle.NewService(
 			internalArticle.NewRepo(deps.DB, deps.RedisDB),
+			pointsService,
 		),
 	)
 	commentHandler := internalComment.NewHandler(
 		internalComment.NewService(
 			internalComment.NewRepo(deps.DB),
+			pointsService,
 		),
 	)
 	exchangeHandler := internalExchange.NewHandler(
@@ -78,11 +85,16 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 		protectedAPI.POST("/exchangeRates", exchangeHandler.CreateExchangeRate)
 		protectedAPI.POST("/articles", articleHandler.CreateArticle)
 		protectedAPI.POST("/articles/:id/like", articleHandler.LikeArticle)
+		protectedAPI.POST("/articles/:id/unlock", pointsHandler.UnlockArticle)
 		protectedAPI.POST("/articles/:id/comments", commentHandler.CreateComment)
 		protectedAPI.DELETE("/comments/:id", commentHandler.DeleteComment)
 		protectedAPI.POST("/articles/:id/favorite", favoriteHandler.CreateFavorite)
 		protectedAPI.DELETE("/articles/:id/favorite", favoriteHandler.DeleteFavorite)
 		protectedAPI.GET("/me/favorites", favoriteHandler.ListMyFavorites)
+		protectedAPI.GET("/me/points", pointsHandler.GetMyPoints)
+		protectedAPI.GET("/me/points/records", pointsHandler.GetMyPointsRecords)
+		protectedAPI.POST("/me/check-in", pointsHandler.CheckIn)
+		protectedAPI.POST("/me/points/redeem", pointsHandler.RedeemPrivilege)
 	}
 	return r
 }

@@ -6,17 +6,19 @@ import (
 	"errors"
 	"fmt"
 
+	internalPoints "exchangeapp/internal/points"
 	"gorm.io/gorm"
 )
 
 const CacheKeyPrefix = "articles:list:"
 
 type Service struct {
-	repo *Repo
+	repo          *Repo
+	pointsService *internalPoints.Service
 }
 
-func NewService(repo *Repo) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repo, pointsService *internalPoints.Service) *Service {
+	return &Service{repo: repo, pointsService: pointsService}
 }
 
 func (s *Service) Create(ctx context.Context, req CreateArticleRequest) (ArticleResponse, error) {
@@ -44,6 +46,11 @@ func (s *Service) Create(ctx context.Context, req CreateArticleRequest) (Article
 
 	if err := s.repo.Create(article); err != nil {
 		return ArticleResponse{}, err
+	}
+	if s.pointsService != nil {
+		if err := s.pointsService.AwardPublishResource(article.AuthorID, article.ID); err != nil {
+			return ArticleResponse{}, err
+		}
 	}
 	s.repo.DeleteArticlesCacheByPrefix(ctx, CacheKeyPrefix)
 
