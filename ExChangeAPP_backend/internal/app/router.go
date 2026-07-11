@@ -24,6 +24,11 @@ type Dependencies struct {
 
 func SetUpRouter(deps Dependencies) *gin.Engine {
 	r := gin.Default()
+	r.GET("/healthz", func(ctx *gin.Context) {
+		ctx.JSON(200, gin.H{
+			"status": "ok",
+		})
+	})
 
 	authService := internalAuth.NewService(
 		internalAuth.NewRepo(deps.DB, deps.RedisDB),
