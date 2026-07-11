@@ -20,9 +20,9 @@ dist/
 !.env.example
 
 # Vue/TS source-generated artifacts; keep .ts/.vue only in src/
-Exchangeapp_frontend/src/**/*.js
-Exchangeapp_frontend/src/**/*.vue.js
-Exchangeapp_frontend/__VLS_types.d.ts
+frontend/src/**/*.js
+frontend/src/**/*.vue.js
+frontend/__VLS_types.d.ts
 
 
 # ========== IDE ==========
