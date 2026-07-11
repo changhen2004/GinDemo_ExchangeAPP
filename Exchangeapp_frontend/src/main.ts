@@ -4,9 +4,24 @@ import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';
 import App from './App.vue';
 import router from './router';
+import { useAuthStore } from './store/auth';
 
-const app = createApp(App);
-app.use(createPinia());
-app.use(ElementPlus);
-app.use(router);
-app.mount('#app');
+async function bootstrap() {
+  const app = createApp(App);
+  const pinia = createPinia();
+
+  app.use(pinia);
+
+  const authStore = useAuthStore(pinia);
+  try {
+    await authStore.restoreSession();
+  } catch (error) {
+    console.error('Failed to restore session:', error);
+  }
+
+  app.use(ElementPlus);
+  app.use(router);
+  app.mount('#app');
+}
+
+void bootstrap();
