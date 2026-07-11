@@ -49,6 +49,10 @@ func (h *Handler) CreateComment(ctx *gin.Context) {
 		writeError(ctx, http.StatusBadRequest, 10001, err.Error(), "INVALID_REQUEST")
 		return
 	}
+	if err := ValidateCreateCommentRequest(req); err != nil {
+		writeError(ctx, http.StatusBadRequest, 10001, err.Error(), "INVALID_REQUEST")
+		return
+	}
 
 	resp, err := h.service.Create(ctx, ctx.Param("id"), req)
 	if err != nil {

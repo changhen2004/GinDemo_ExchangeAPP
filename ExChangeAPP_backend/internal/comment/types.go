@@ -3,7 +3,7 @@ package comment
 import "time"
 
 type CreateCommentRequest struct {
-	Content string `json:"content" binding:"required"`
+	Content string `json:"content" binding:"required,max=1000"`
 }
 
 type CommentAuthorResponse struct {

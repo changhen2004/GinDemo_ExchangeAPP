@@ -49,6 +49,10 @@ func (h *Handler) Register(ctx *gin.Context) {
 		writeError(ctx, http.StatusBadRequest, 10001, err.Error(), "INVALID_REQUEST")
 		return
 	}
+	if err := ValidateCredentials(req.Username, req.Password); err != nil {
+		writeError(ctx, http.StatusBadRequest, 10001, err.Error(), "INVALID_REQUEST")
+		return
+	}
 
 	resp, err := h.service.Register(req)
 	if err != nil {
@@ -67,6 +71,10 @@ func (h *Handler) Register(ctx *gin.Context) {
 func (h *Handler) Login(ctx *gin.Context) {
 	var req LoginRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, http.StatusBadRequest, 10001, err.Error(), "INVALID_REQUEST")
+		return
+	}
+	if err := ValidateCredentials(req.Username, req.Password); err != nil {
 		writeError(ctx, http.StatusBadRequest, 10001, err.Error(), "INVALID_REQUEST")
 		return
 	}

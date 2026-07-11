@@ -7,14 +7,14 @@ import (
 
 type CreateArticleRequest struct {
 	Title          string   `json:"title" binding:"required,max=200"`
-	Content        string   `json:"content" binding:"required"`
+	Content        string   `json:"content" binding:"required,max=20000"`
 	Preview        string   `json:"preview" binding:"required,max=500"`
 	CoverURL       string   `json:"coverUrl"`
 	ContentImages  []string `json:"contentImages"`
 	Tags           []string `json:"tags"`
 	Status         string   `json:"status" binding:"omitempty,oneof=draft published archived"`
 	IsFree         *bool    `json:"isFree"`
-	RequiredPoints uint     `json:"requiredPoints"`
+	RequiredPoints uint     `json:"requiredPoints" binding:"max=10000"`
 }
 
 type ListArticlesQuery struct {
