@@ -9,7 +9,7 @@ type Article struct {
 	Content        string `binding:"required" gorm:"type:text;not null"`
 	Preview        string `binding:"required,max=500" gorm:"size:500;not null"`
 	CoverURL       string `gorm:"size:500;not null;default:''"`
-	ContentImages  string `gorm:"type:text;not null;default:''"`
+	ContentImages  string `gorm:"type:text;not null"`
 	Tags           string `gorm:"size:500;not null;default:'';index"`
 	Status         string `binding:"omitempty,oneof=draft published archived" gorm:"size:20;not null;default:draft;index"`
 	ViewCount      uint   `gorm:"not null;default:0"`
