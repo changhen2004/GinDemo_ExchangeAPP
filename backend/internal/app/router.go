@@ -14,6 +14,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -30,12 +31,14 @@ type Dependencies struct {
 func SetUpRouter(deps Dependencies) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(MetricsMiddleware())
 	r.Use(ObservabilityMiddleware(deps.SlowRequestThreshold))
 	r.GET("/healthz", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{
 			"status": "ok",
 		})
 	})
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	if deps.EnablePprof {
 		pprof.Register(r)

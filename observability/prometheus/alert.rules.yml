@@ -1,0 +1,41 @@
+groups:
+  - name: resource_community_go_api
+    rules:
+      - alert: ResourceCommunityHighErrorRate
+        expr: |
+          (
+            sum(rate(resource_community_http_requests_total{status=~"5.."}[1m]))
+            /
+            clamp_min(sum(rate(resource_community_http_requests_total[1m])), 0.001)
+          ) * 100 > 5
+        for: 30s
+        labels:
+          severity: warning
+          service: resource_community_go
+        annotations:
+          summary: "resource_community_go 5xx error rate is high"
+          description: "5xx error rate is {{ $value }}% over the last minute."
+
+      - alert: ResourceCommunityHighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(resource_community_http_request_duration_seconds_bucket[1m])) by (le)
+          ) > 0.5
+        for: 30s
+        labels:
+          severity: warning
+          service: resource_community_go
+        annotations:
+          summary: "resource_community_go P95 latency is high"
+          description: "P95 latency is {{ $value }} seconds over the last minute."
+
+      - alert: ResourceCommunityBackendDown
+        expr: up{job="resource-community-backend"} == 0
+        for: 15s
+        labels:
+          severity: critical
+          service: resource_community_go
+        annotations:
+          summary: "resource_community_go backend metrics target is down"
+          description: "Prometheus cannot scrape backend:3000/metrics."
