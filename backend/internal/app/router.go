@@ -5,7 +5,6 @@ import (
 	"resource_community_go/internal/asyncjob"
 	internalAuth "resource_community_go/internal/auth"
 	internalComment "resource_community_go/internal/comment"
-	internalExchange "resource_community_go/internal/exchange"
 	internalFavorite "resource_community_go/internal/favorite"
 	internalMedia "resource_community_go/internal/media"
 	internalPoints "resource_community_go/internal/points"
@@ -70,11 +69,7 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 			pointsService,
 		),
 	)
-	exchangeHandler := internalExchange.NewHandler(
-		internalExchange.NewService(
-			internalExchange.NewRepo(deps.DB),
-		),
-	)
+
 	favoriteHandler := internalFavorite.NewHandler(
 		internalFavorite.NewService(
 			internalFavorite.NewRepo(deps.DB, deps.RedisDB),
@@ -105,7 +100,6 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 
 	publicAPI := r.Group("/api")
 	{
-		publicAPI.GET("/exchangeRates", exchangeHandler.GetExchangeRate)
 		publicAPI.GET("/articles", articleHandler.GetArticles)
 		publicAPI.GET("/articles/hot", articleHandler.GetHotArticles)
 		publicAPI.GET("/articles/:id", articleHandler.GetArticleByID)
@@ -117,7 +111,6 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 	protectedAPI.Use(AuthMiddleware(authService))
 	{
 		protectedAPI.POST("/auth/logout", authHandler.Logout)
-		protectedAPI.POST("/exchangeRates", RateLimitMiddleware(deps.RedisDB, publishRateLimitRule), exchangeHandler.CreateExchangeRate)
 		protectedAPI.POST("/articles", RateLimitMiddleware(deps.RedisDB, publishRateLimitRule), articleHandler.CreateArticle)
 		protectedAPI.POST("/articles/:id/like", articleHandler.LikeArticle)
 		protectedAPI.POST("/articles/:id/unlock", pointsHandler.UnlockArticle)
