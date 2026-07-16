@@ -1,188 +1,227 @@
 <template>
-  <el-container class="resource-page">
-    <el-main class="resource-main">
-      <section class="resource-hero">
-        <div>
-          <p class="eyebrow">RESOURCE DISCOVERY</p>
-          <h1>发现值得收藏的社区内容</h1>
-          <p class="hero-copy">
-            按标签、排序和关键词快速筛选资源，找到最新发布和最受欢迎的内容。
-          </p>
-        </div>
-        <div class="hero-stats">
-          <div class="stat-card">
-            <span>当前页</span>
-            <strong>{{ query.page }}</strong>
+  <section class="catalog-shell">
+    <div class="catalog-layout">
+      <aside class="catalog-side">
+        <section class="side-panel">
+          <p class="side-kicker">当前筛选</p>
+          <div class="side-summary">
+            <article>
+              <span>页码</span>
+              <strong>{{ state.page }}</strong>
+            </article>
+            <article>
+              <span>结果数</span>
+              <strong>{{ resources.length }}</strong>
+            </article>
           </div>
-          <div class="stat-card">
-            <span>本页结果</span>
-            <strong>{{ resources.length }}</strong>
-          </div>
-        </div>
-      </section>
 
-      <section class="toolbar-card">
-        <div class="toolbar-top">
-          <el-input
-            v-model="draftKeyword"
-            class="search-box"
-            clearable
-            placeholder="搜索标题关键词"
-            @keyup.enter="applyFilters"
-          >
-            <template #append>
-              <el-button @click="applyFilters">搜索</el-button>
-            </template>
-          </el-input>
-
-          <el-segmented
-            v-model="query.sort"
-            :options="sortOptions"
-            @change="onSortChange"
-          />
-        </div>
-
-        <div class="toolbar-bottom">
-          <div class="filter-group">
-            <span class="filter-label">标签筛选</span>
-            <el-tag
-              :type="query.tag === '' ? 'primary' : 'info'"
-              class="filter-tag"
-              effect="light"
-              @click="selectTag('')"
+          <div class="active-filters">
+            <button
+              v-if="state.sort"
+              type="button"
+              class="active-filter"
+              @click="navigateWithQuery({ sort: 'latest', page: 1 })"
             >
-              全部
-            </el-tag>
-            <el-tag
+              {{ state.sort === 'hot' ? '热度优先' : '最新发布' }}
+            </button>
+            <button
+              v-if="state.keyword"
+              type="button"
+              class="active-filter"
+              @click="navigateWithQuery({ keyword: '', page: 1 })"
+            >
+              关键词: {{ state.keyword }}
+            </button>
+            <button
+              v-if="state.tag"
+              type="button"
+              class="active-filter"
+              @click="navigateWithQuery({ tag: '', page: 1 })"
+            >
+              标签: {{ state.tag }}
+            </button>
+          </div>
+        </section>
+
+        <section class="side-panel">
+          <p class="side-kicker">标签导航</p>
+          <div v-if="availableTags.length" class="side-tags">
+            <button
               v-for="tag in availableTags"
               :key="tag"
-              :type="query.tag === tag ? 'primary' : 'info'"
-              class="filter-tag"
-              effect="light"
+              type="button"
+              :class="['side-tag', { 'side-tag--active': state.tag === tag }]"
               @click="selectTag(tag)"
             >
               {{ tag }}
-            </el-tag>
+            </button>
           </div>
+          <p v-else class="side-empty">当前页还没有足够的标签样本</p>
+        </section>
+      </aside>
 
-          <el-select
-            v-model="query.pageSize"
-            class="page-size-select"
-            placeholder="每页数量"
-            @change="onPageSizeChange"
-          >
-            <el-option
-              v-for="size in pageSizeOptions"
-              :key="size"
-              :label="`${size} 条 / 页`"
-              :value="size"
+      <div class="catalog-main">
+        <section class="catalog-hero">
+          <div>
+            <p class="catalog-kicker">RESOURCE CATALOG</p>
+            <h1>用更清晰的分层卡片浏览资源广场</h1>
+            <p class="catalog-copy">
+              支持关键词搜索、标签筛选、最新发布和热度优先排序，并把筛选条件同步到 URL，方便从首页分区直接进入。
+            </p>
+          </div>
+          <div class="catalog-hero__stats">
+            <article>
+              <span>排序方式</span>
+              <strong>{{ state.sort === 'hot' ? '热度' : '最新' }}</strong>
+            </article>
+            <article>
+              <span>每页数量</span>
+              <strong>{{ state.pageSize }}</strong>
+            </article>
+          </div>
+        </section>
+
+        <section class="toolbar-panel">
+          <div class="toolbar-top">
+            <el-input
+              v-model="draftKeyword"
+              class="search-box"
+              clearable
+              placeholder="搜索标题关键词"
+              @keyup.enter="applyFilters"
+            >
+              <template #append>
+                <el-button @click="applyFilters">搜索</el-button>
+              </template>
+            </el-input>
+
+            <el-segmented
+              v-model="state.sort"
+              :options="sortOptions"
+              @change="onSortChange"
             />
-          </el-select>
-        </div>
-      </section>
-
-      <section v-if="loading" class="state-panel skeleton-grid">
-        <el-skeleton v-for="index in skeletonCount" :key="index" animated class="resource-card">
-          <template #template>
-            <el-skeleton-item variant="h3" style="width: 48%" />
-            <el-skeleton-item variant="text" style="width: 92%" />
-            <el-skeleton-item variant="text" style="width: 82%" />
-            <div class="skeleton-footer">
-              <el-skeleton-item variant="button" style="width: 96px; height: 32px" />
-              <el-skeleton-item variant="text" style="width: 88px" />
-            </div>
-          </template>
-        </el-skeleton>
-      </section>
-
-      <section v-else-if="errorMessage" class="state-panel">
-        <el-result icon="warning" title="加载失败" :sub-title="errorMessage">
-          <template #extra>
-            <el-button type="primary" @click="fetchResources">重新加载</el-button>
-          </template>
-        </el-result>
-      </section>
-
-      <section v-else-if="!resources.length" class="state-panel">
-        <el-empty description="当前筛选条件下暂无内容">
-          <el-button @click="resetFilters">重置筛选</el-button>
-        </el-empty>
-      </section>
-
-      <section v-else class="resource-grid">
-        <el-card
-          v-for="resource in resources"
-          :key="resource.id"
-          class="resource-card"
-          shadow="hover"
-        >
-          <div class="resource-card__meta">
-            <span class="resource-status">{{ resource.status || 'published' }}</span>
-            <span class="resource-points">
-              {{ resource.isFree ? '免费' : `${resource.requiredPoints || 0} 积分` }}
-            </span>
           </div>
 
-          <h2>{{ resource.title }}</h2>
-          <p class="resource-preview">{{ resource.preview }}</p>
+          <div class="toolbar-bottom">
+            <div class="filter-group">
+              <span class="filter-label">标签筛选</span>
+              <button
+                type="button"
+                :class="['filter-chip', { 'filter-chip--active': state.tag === '' }]"
+                @click="selectTag('')"
+              >
+                全部
+              </button>
+              <button
+                v-for="tag in availableTags"
+                :key="tag"
+                type="button"
+                :class="['filter-chip', { 'filter-chip--active': state.tag === tag }]"
+                @click="selectTag(tag)"
+              >
+                {{ tag }}
+              </button>
+            </div>
 
-          <div class="resource-tags" v-if="resource.tags?.length">
-            <el-tag
-              v-for="tag in resource.tags"
-              :key="tag"
-              size="small"
-              effect="plain"
-              @click="selectTag(tag)"
+            <el-select
+              v-model="state.pageSize"
+              class="page-size-select"
+              placeholder="每页数量"
+              @change="onPageSizeChange"
             >
-              {{ tag }}
-            </el-tag>
+              <el-option
+                v-for="size in pageSizeOptions"
+                :key="size"
+                :label="`${size} 条 / 页`"
+                :value="size"
+              />
+            </el-select>
           </div>
+        </section>
 
-          <div class="resource-footer">
-            <div class="resource-stats">
-              <span>热度 {{ resource.likeCount ?? 0 }}</span>
-              <span>浏览 {{ resource.viewCount ?? 0 }}</span>
-              <span>评论 {{ resource.commentCount ?? 0 }}</span>
-            </div>
-            <el-button text type="primary" @click="viewDetail(resource.id)">阅读更多</el-button>
+        <section v-if="loading" class="state-panel loading-grid">
+          <el-skeleton v-for="index in skeletonCount" :key="index" animated class="loading-card">
+            <template #template>
+              <el-skeleton-item variant="image" style="width: 100%; height: 220px" />
+              <div class="loading-copy">
+                <el-skeleton-item variant="h3" style="width: 54%" />
+                <el-skeleton-item variant="text" style="width: 92%" />
+                <el-skeleton-item variant="text" style="width: 82%" />
+              </div>
+            </template>
+          </el-skeleton>
+        </section>
+
+        <section v-else-if="errorMessage" class="state-panel">
+          <el-result icon="warning" title="加载失败" :sub-title="errorMessage">
+            <template #extra>
+              <el-button type="primary" @click="fetchResources">重新加载</el-button>
+            </template>
+          </el-result>
+        </section>
+
+        <section v-else-if="!resources.length" class="state-panel">
+          <el-empty description="当前筛选条件下暂无内容">
+            <el-button @click="resetFilters">重置筛选</el-button>
+          </el-empty>
+        </section>
+
+        <section v-else class="resource-grid">
+          <ResourceStoryCard
+            v-for="resource in resources"
+            :key="resource.id"
+            :resource="resource"
+            @tag="selectTag"
+          />
+        </section>
+
+        <section class="pagination-bar">
+          <el-button :disabled="state.page === 1 || loading" @click="changePage(state.page - 1)">
+            上一页
+          </el-button>
+          <div class="page-indicator">
+            <span>第 {{ state.page }} 页</span>
+            <small v-if="resources.length < state.pageSize">已到达最后一页</small>
           </div>
-        </el-card>
-      </section>
-
-      <section class="pagination-bar">
-        <el-button :disabled="query.page === 1 || loading" @click="changePage(query.page - 1)">
-          上一页
-        </el-button>
-        <div class="page-indicator">
-          <span>第 {{ query.page }} 页</span>
-          <small v-if="resources.length < query.pageSize">已到达最后一页</small>
-        </div>
-        <el-button
-          :disabled="loading || resources.length < query.pageSize"
-          @click="changePage(query.page + 1)"
-        >
-          下一页
-        </el-button>
-      </section>
-    </el-main>
-  </el-container>
+          <el-button
+            :disabled="loading || resources.length < state.pageSize"
+            @click="changePage(state.page + 1)"
+          >
+            下一页
+          </el-button>
+        </section>
+      </div>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { listArticles } from '../api/article';
+import ResourceStoryCard from '../components/ResourceStoryCard.vue';
 import type { ResourceSummary } from '../types/resource';
 
+type SortMode = 'latest' | 'hot';
+
+interface CatalogState {
+  page: number;
+  pageSize: number;
+  sort: SortMode;
+  keyword: string;
+  tag: string;
+}
+
 const router = useRouter();
+const route = useRoute();
 const resources = ref<ResourceSummary[]>([]);
 const loading = ref(false);
 const errorMessage = ref('');
 const draftKeyword = ref('');
-const query = reactive({
+const state = reactive<CatalogState>({
   page: 1,
   pageSize: 6,
-  sort: 'latest' as 'latest' | 'hot',
+  sort: 'latest',
   keyword: '',
   tag: '',
 });
@@ -198,15 +237,44 @@ const availableTags = computed(() => {
   const tagSet = new Set<string>();
   resources.value.forEach((resource) => {
     resource.tags?.forEach((tag) => {
-      if (tag.trim()) {
-        tagSet.add(tag);
+      const normalized = tag.trim();
+      if (normalized) {
+        tagSet.add(normalized);
       }
     });
   });
   return Array.from(tagSet);
 });
 
-const skeletonCount = computed(() => query.pageSize);
+const skeletonCount = computed(() => state.pageSize);
+
+const parsePositiveNumber = (value: unknown, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const normalizeQuery = (query: Record<string, unknown>): CatalogState => {
+  const sort = query.sort === 'hot' ? 'hot' : 'latest';
+  return {
+    page: parsePositiveNumber(query.page, 1),
+    pageSize: [6, 12, 18].includes(Number(query.pageSize))
+      ? Number(query.pageSize)
+      : 6,
+    sort,
+    keyword: typeof query.keyword === 'string' ? query.keyword : '',
+    tag: typeof query.tag === 'string' ? query.tag : '',
+  };
+};
+
+const buildRouteQuery = (nextState: CatalogState) => {
+  return {
+    ...(nextState.page > 1 ? { page: String(nextState.page) } : {}),
+    ...(nextState.pageSize !== 6 ? { pageSize: String(nextState.pageSize) } : {}),
+    ...(nextState.sort !== 'latest' ? { sort: nextState.sort } : {}),
+    ...(nextState.keyword ? { keyword: nextState.keyword } : {}),
+    ...(nextState.tag ? { tag: nextState.tag } : {}),
+  };
+};
 
 const fetchResources = async () => {
   loading.value = true;
@@ -214,11 +282,11 @@ const fetchResources = async () => {
 
   try {
     resources.value = await listArticles({
-      page: query.page,
-      pageSize: query.pageSize,
-      sort: query.sort,
-      keyword: query.keyword || undefined,
-      tag: query.tag || undefined,
+      page: state.page,
+      pageSize: state.pageSize,
+      sort: state.sort,
+      keyword: state.keyword || undefined,
+      tag: state.tag || undefined,
     });
   } catch (error) {
     console.error('Failed to load resources:', error);
@@ -228,286 +296,353 @@ const fetchResources = async () => {
   }
 };
 
-const applyFilters = async () => {
-  query.page = 1;
-  query.keyword = draftKeyword.value.trim();
-  await fetchResources();
+const navigateWithQuery = (patch: Partial<CatalogState>) => {
+  const nextState: CatalogState = {
+    ...state,
+    ...patch,
+  };
+
+  router.replace({
+    name: 'Resources',
+    query: buildRouteQuery(nextState),
+  });
 };
 
-const resetFilters = async () => {
+const applyFilters = () => {
+  navigateWithQuery({
+    page: 1,
+    keyword: draftKeyword.value.trim(),
+  });
+};
+
+const resetFilters = () => {
   draftKeyword.value = '';
-  query.page = 1;
-  query.pageSize = 6;
-  query.sort = 'latest';
-  query.keyword = '';
-  query.tag = '';
-  await fetchResources();
+  router.replace({ name: 'Resources', query: {} });
 };
 
-const selectTag = async (tag: string) => {
-  query.tag = tag;
-  query.page = 1;
-  await fetchResources();
+const selectTag = (tag: string) => {
+  navigateWithQuery({
+    page: 1,
+    tag,
+  });
 };
 
-const onSortChange = async () => {
-  query.page = 1;
-  await fetchResources();
+const onSortChange = () => {
+  navigateWithQuery({
+    page: 1,
+    sort: state.sort,
+  });
 };
 
-const onPageSizeChange = async () => {
-  query.page = 1;
-  await fetchResources();
+const onPageSizeChange = () => {
+  navigateWithQuery({
+    page: 1,
+    pageSize: state.pageSize,
+  });
 };
 
-const changePage = async (page: number) => {
+const changePage = (page: number) => {
   if (page < 1 || loading.value) {
     return;
   }
-  query.page = page;
-  await fetchResources();
+
+  navigateWithQuery({ page });
 };
 
-const viewDetail = (id: number) => {
-  router.push({ name: 'ResourceDetail', params: { id } });
-};
-
-onMounted(fetchResources);
+watch(
+  () => route.query,
+  async (query) => {
+    const normalized = normalizeQuery(query as Record<string, unknown>);
+    state.page = normalized.page;
+    state.pageSize = normalized.pageSize;
+    state.sort = normalized.sort;
+    state.keyword = normalized.keyword;
+    state.tag = normalized.tag;
+    draftKeyword.value = normalized.keyword;
+    await fetchResources();
+  },
+  { immediate: true },
+);
 </script>
 
 <style scoped>
-.resource-page {
-  min-height: 100%;
-  background:
-    radial-gradient(circle at top left, rgba(255, 227, 191, 0.95), transparent 24%),
-    radial-gradient(circle at top right, rgba(255, 171, 145, 0.28), transparent 18%),
-    linear-gradient(180deg, #f7f0e7 0%, #efe2d0 100%);
+.catalog-shell {
+  padding: 28px 24px 64px;
 }
 
-.resource-main {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 32px 24px 56px;
-}
-
-.resource-hero {
+.catalog-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.9fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: 24px;
-  align-items: end;
-  margin-bottom: 24px;
+  max-width: 1440px;
+  margin: 0 auto;
 }
 
-.eyebrow {
-  margin: 0 0 12px;
-  letter-spacing: 0.22em;
+.catalog-side {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.side-panel,
+.catalog-hero,
+.toolbar-panel,
+.state-panel {
+  border: 1px solid rgba(56, 61, 64, 0.08);
+  border-radius: 24px;
+  background: rgba(251, 250, 245, 0.88);
+  box-shadow: 0 20px 44px rgba(45, 51, 54, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+.side-panel {
+  position: sticky;
+  top: 108px;
+  padding: 20px;
+}
+
+.side-kicker,
+.catalog-kicker {
+  margin: 0;
+  color: #7c6843;
   font-size: 12px;
   font-weight: 700;
-  color: #9d4f2e;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
-.resource-hero h1 {
-  margin: 0;
-  font-size: clamp(34px, 5vw, 52px);
+.side-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.side-summary article {
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f5efe0, #f8f6f0);
+}
+
+.side-summary span {
+  display: block;
+  color: #7a6b55;
+  font-size: 12px;
+}
+
+.side-summary strong {
+  display: block;
+  margin-top: 10px;
+  color: #152f35;
+  font-size: 24px;
+}
+
+.active-filters,
+.side-tags {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.active-filter,
+.side-tag,
+.filter-chip {
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.active-filter {
+  padding: 8px 12px;
+  background: #e7efee;
+  color: #1b434a;
+  font-size: 12px;
+}
+
+.side-tag,
+.filter-chip {
+  padding: 8px 14px;
+  background: #eef3f2;
+  color: #224b53;
+  font-size: 13px;
+}
+
+.side-tag--active,
+.filter-chip--active {
+  background: #183f44;
+  color: #f7f4eb;
+}
+
+.side-empty {
+  margin: 14px 0 0;
+  color: #6a757a;
+  line-height: 1.7;
+}
+
+.catalog-main {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.catalog-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.7fr);
+  gap: 20px;
+  align-items: end;
+  padding: 26px;
+}
+
+.catalog-hero h1 {
+  margin: 12px 0 0;
+  color: #152f35;
+  font-size: clamp(34px, 5vw, 56px);
   line-height: 1.04;
-  color: #2e1a12;
 }
 
-.hero-copy {
-  max-width: 680px;
-  margin: 16px 0 0;
-  font-size: 16px;
-  line-height: 1.75;
-  color: #6d5548;
+.catalog-copy {
+  max-width: 720px;
+  margin: 18px 0 0;
+  color: #5c696d;
+  line-height: 1.8;
 }
 
-.hero-stats {
+.catalog-hero__stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
-.stat-card,
-.toolbar-card,
-.resource-card,
-.state-panel {
-  border: 1px solid rgba(93, 52, 34, 0.08);
-  border-radius: 24px;
-  background: rgba(255, 251, 247, 0.85);
-  box-shadow: 0 16px 40px rgba(84, 53, 37, 0.09);
-  backdrop-filter: blur(18px);
+.catalog-hero__stats article {
+  padding: 18px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #f5efe0, #f8f6f0);
 }
 
-.stat-card {
-  padding: 18px 20px;
-}
-
-.stat-card span {
+.catalog-hero__stats span {
   display: block;
-  color: #8d725d;
+  color: #7a6b55;
   font-size: 12px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
-.stat-card strong {
+.catalog-hero__stats strong {
   display: block;
   margin-top: 10px;
-  font-size: 28px;
-  color: #2e1a12;
+  color: #152f35;
+  font-size: 26px;
 }
 
-.toolbar-card {
-  margin-bottom: 24px;
+.toolbar-panel {
   padding: 20px;
 }
 
 .toolbar-top,
 .toolbar-bottom {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
   align-items: center;
 }
 
 .toolbar-bottom {
   margin-top: 18px;
-  flex-wrap: wrap;
+  justify-content: space-between;
 }
 
 .search-box {
-  max-width: 560px;
+  flex: 1;
 }
 
 .filter-group {
   display: flex;
-  align-items: center;
   gap: 10px;
+  align-items: center;
   flex-wrap: wrap;
 }
 
 .filter-label {
-  color: #7a6153;
+  color: #57666b;
   font-size: 13px;
-  font-weight: 600;
-}
-
-.filter-tag {
-  cursor: pointer;
+  font-weight: 700;
 }
 
 .page-size-select {
   width: 140px;
 }
 
-.state-panel {
-  min-height: 280px;
-  padding: 28px;
-}
-
-.skeleton-grid,
-.resource-grid {
+.resource-grid,
+.loading-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
 }
 
-.resource-card {
-  padding: 22px;
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
+.loading-card {
+  overflow: hidden;
+  border-radius: 24px;
 }
 
-.resource-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 20px 48px rgba(84, 53, 37, 0.14);
-}
-
-.resource-card h2 {
-  margin: 14px 0 10px;
-  font-size: 24px;
-  line-height: 1.2;
-  color: #2e1a12;
-}
-
-.resource-card__meta,
-.resource-footer,
-.resource-stats {
+.loading-copy {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-}
-
-.resource-card__meta {
-  color: #8d725d;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.resource-preview {
-  margin: 0;
-  color: #6d5548;
-  line-height: 1.7;
-  min-height: 76px;
-}
-
-.resource-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.resource-footer {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(93, 52, 34, 0.08);
-}
-
-.resource-stats {
-  color: #7a6153;
-  font-size: 13px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
 }
 
 .pagination-bar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  margin-top: 24px;
-  padding: 0 4px;
+  justify-content: center;
+  gap: 18px;
+  padding: 6px 0;
 }
 
 .page-indicator {
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: #654d40;
+  color: #4f5d63;
 }
 
 .page-indicator small {
-  margin-top: 4px;
-  color: #9b816f;
+  color: #8b7760;
 }
 
-.skeleton-footer {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 18px;
-}
-
-@media (max-width: 900px) {
-  .resource-main {
-    padding: 24px 16px 40px;
+@media (max-width: 1180px) {
+  .catalog-layout {
+    grid-template-columns: 1fr;
   }
 
-  .resource-hero,
-  .skeleton-grid,
-  .resource-grid {
-    grid-template-columns: 1fr;
+  .catalog-side {
+    order: 2;
+  }
+
+  .side-panel {
+    position: static;
+  }
+
+  .catalog-hero,
+  .resource-grid,
+  .loading-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .catalog-hero > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .catalog-shell {
+    padding: 18px 12px 40px;
+  }
+
+  .catalog-hero,
+  .toolbar-panel,
+  .state-panel,
+  .side-panel {
+    padding: 18px;
+    border-radius: 20px;
   }
 
   .toolbar-top,
@@ -517,8 +652,15 @@ onMounted(fetchResources);
     align-items: stretch;
   }
 
-  .page-indicator {
-    order: -1;
+  .catalog-hero,
+  .catalog-hero__stats,
+  .resource-grid,
+  .loading-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-size-select {
+    width: 100%;
   }
 }
 </style>
