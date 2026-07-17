@@ -25,6 +25,13 @@ type ListArticlesQuery struct {
 	Tag      string
 }
 
+type FollowingFeedQuery struct {
+	FollowerID      uint
+	PageSize        int
+	BeforeCreatedAt time.Time
+	BeforeID        uint
+}
+
 type ArticleResponse struct {
 	ID             uint      `json:"id"`
 	AuthorID       uint      `json:"authorId"`
@@ -84,6 +91,17 @@ type LikeActionResponse struct {
 	Likes   int    `json:"likes"`
 }
 
+type FollowingFeedCursorResponse struct {
+	BeforeCreatedAt string `json:"beforeCreatedAt"`
+	BeforeID        uint   `json:"beforeId"`
+}
+
+type FollowingFeedResponse struct {
+	Items      []ArticleResponse            `json:"items"`
+	NextCursor *FollowingFeedCursorResponse `json:"nextCursor,omitempty"`
+	HasMore    bool                         `json:"hasMore"`
+}
+
 func toArticleResponse(article Article) ArticleResponse {
 	return ArticleResponse{
 		ID:             article.ID,
@@ -137,6 +155,36 @@ func NewListArticlesQuery(page, pageSize int, sort, keyword, tag string) ListArt
 		Keyword:  strings.TrimSpace(keyword),
 		Tag:      strings.ToLower(strings.TrimSpace(tag)),
 	}
+}
+
+func NewFollowingFeedQuery(followerID uint, pageSize int, beforeCreatedAt string, beforeID uint) FollowingFeedQuery {
+	if pageSize < 1 {
+		pageSize = 10
+	}
+	if pageSize > 50 {
+		pageSize = 50
+	}
+
+	var parsedBefore time.Time
+	if strings.TrimSpace(beforeCreatedAt) != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(beforeCreatedAt)); err == nil {
+			parsedBefore = parsed
+		}
+	}
+
+	return FollowingFeedQuery{
+		FollowerID:      followerID,
+		PageSize:        pageSize,
+		BeforeCreatedAt: parsedBefore,
+		BeforeID:        beforeID,
+	}
+}
+
+func (q FollowingFeedQuery) CacheBeforeCreatedAt() string {
+	if q.BeforeCreatedAt.IsZero() {
+		return ""
+	}
+	return q.BeforeCreatedAt.Format(time.RFC3339Nano)
 }
 
 func normalizeTags(tags []string) []string {

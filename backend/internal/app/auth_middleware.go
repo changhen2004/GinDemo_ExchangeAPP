@@ -55,3 +55,26 @@ func AuthMiddleware(authService *internalAuth.Service) gin.HandlerFunc {
 		ctx.Next()
 	}
 }
+
+func OptionalAuthMiddleware(authService *internalAuth.Service) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		authHeader := ctx.GetHeader("Authorization")
+		if authHeader == "" {
+			ctx.Next()
+			return
+		}
+
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
+			ctx.Next()
+			return
+		}
+
+		claims, err := authService.ValidateAccessToken(strings.TrimSpace(parts[1]))
+		if err == nil {
+			ctx.Set("userID", claims.UserID)
+			ctx.Set("username", claims.Username)
+		}
+		ctx.Next()
+	}
+}

@@ -94,6 +94,7 @@ func (s *Service) Create(ctx context.Context, req CreateArticleRequest) (Article
 	}
 	s.repo.DeleteArticlesCacheByPrefix(ctx, cachekey.ArticleListPrefix)
 	s.repo.DeleteArticlesCacheByPrefix(ctx, cachekey.ArticleHotPrefix)
+	s.repo.DeleteArticlesCacheByPrefix(ctx, cachekey.ArticleFollowingPrefix)
 
 	return toArticleResponse(*article), nil
 }
@@ -118,6 +119,50 @@ func (s *Service) List(ctx context.Context, query ListArticlesQuery) ([]ArticleR
 		s.repo.SetArticlesCache(ctx, cacheKey, string(payload), cachekey.ArticleListTTL)
 	}
 	return responses, nil
+}
+
+func (s *Service) ListFollowing(ctx context.Context, query FollowingFeedQuery) (FollowingFeedResponse, error) {
+	cacheKey := cachekey.ArticleFollowingKey(
+		query.FollowerID,
+		query.PageSize,
+		query.CacheBeforeCreatedAt(),
+		query.BeforeID,
+	)
+	cached, err := s.repo.GetArticlesCache(ctx, cacheKey)
+	if err == nil {
+		var response FollowingFeedResponse
+		if unmarshalErr := json.Unmarshal([]byte(cached), &response); unmarshalErr == nil {
+			return response, nil
+		}
+	}
+
+	repoQuery := query
+	repoQuery.PageSize = query.PageSize + 1
+	articles, err := s.repo.ListFollowing(ctx, repoQuery)
+	if err != nil {
+		return FollowingFeedResponse{}, err
+	}
+
+	hasMore := len(articles) > query.PageSize
+	if hasMore {
+		articles = articles[:query.PageSize]
+	}
+
+	response := FollowingFeedResponse{
+		Items:   toArticleResponses(articles),
+		HasMore: hasMore,
+	}
+	if hasMore && len(articles) > 0 {
+		last := articles[len(articles)-1]
+		response.NextCursor = &FollowingFeedCursorResponse{
+			BeforeCreatedAt: last.CreatedAt.Format(time.RFC3339Nano),
+			BeforeID:        last.ID,
+		}
+	}
+	if payload, marshalErr := json.Marshal(response); marshalErr == nil {
+		s.repo.SetArticlesCache(ctx, cacheKey, string(payload), cachekey.ArticleFollowingTTL)
+	}
+	return response, nil
 }
 
 func (s *Service) FindByID(id string) (ArticleResponse, error) {

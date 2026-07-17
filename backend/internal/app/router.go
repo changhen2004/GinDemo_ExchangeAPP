@@ -8,6 +8,7 @@ import (
 	internalFavorite "resource_community_go/internal/favorite"
 	internalMedia "resource_community_go/internal/media"
 	internalPoints "resource_community_go/internal/points"
+	internalSocial "resource_community_go/internal/social"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -61,6 +62,12 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 	articleHandler := internalArticle.NewHandler(
 		articleService,
 	)
+	socialHandler := internalSocial.NewHandler(
+		internalSocial.NewService(
+			internalSocial.NewRepo(deps.DB, deps.RedisDB),
+			internalAuth.NewRepo(deps.DB, deps.RedisDB),
+		),
+	)
 	commentHandler := internalComment.NewHandler(
 		internalComment.NewService(
 			internalComment.NewRepo(deps.DB),
@@ -69,7 +76,6 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 			pointsService,
 		),
 	)
-
 	favoriteHandler := internalFavorite.NewHandler(
 		internalFavorite.NewService(
 			internalFavorite.NewRepo(deps.DB, deps.RedisDB),
@@ -118,6 +124,9 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 		protectedAPI.DELETE("/comments/:id", commentHandler.DeleteComment)
 		protectedAPI.POST("/articles/:id/favorite", favoriteHandler.CreateFavorite)
 		protectedAPI.DELETE("/articles/:id/favorite", favoriteHandler.DeleteFavorite)
+		protectedAPI.GET("/me/following/articles", articleHandler.GetFollowingArticles)
+		protectedAPI.POST("/authors/:id/follow", socialHandler.FollowAuthor)
+		protectedAPI.DELETE("/authors/:id/follow", socialHandler.UnfollowAuthor)
 		protectedAPI.POST("/uploads/cover", mediaHandler.UploadCover)
 		protectedAPI.POST("/uploads/content-images", mediaHandler.UploadContentImages)
 		protectedAPI.GET("/me/favorites", favoriteHandler.ListMyFavorites)
@@ -126,5 +135,6 @@ func SetUpRouter(deps Dependencies) *gin.Engine {
 		protectedAPI.POST("/me/check-in", RateLimitMiddleware(deps.RedisDB, checkInRateLimitRule), pointsHandler.CheckIn)
 		protectedAPI.POST("/me/points/redeem", pointsHandler.RedeemPrivilege)
 	}
+	publicAPI.GET("/authors/:id/social-status", OptionalAuthMiddleware(authService), socialHandler.GetAuthorSocialStatus)
 	return r
 }

@@ -106,6 +106,22 @@ func (h *Handler) GetHotArticles(ctx *gin.Context) {
 	writeSuccess(ctx, http.StatusOK, resp)
 }
 
+func (h *Handler) GetFollowingArticles(ctx *gin.Context) {
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "10"))
+	beforeID, _ := strconv.ParseUint(ctx.DefaultQuery("beforeId", "0"), 10, 64)
+	resp, err := h.service.ListFollowing(ctx.Request.Context(), NewFollowingFeedQuery(
+		userIDFromGinContext(ctx),
+		pageSize,
+		ctx.Query("beforeCreatedAt"),
+		uint(beforeID),
+	))
+	if err != nil {
+		writeError(ctx, http.StatusInternalServerError, 10005, err.Error(), "INTERNAL_ERROR")
+		return
+	}
+	writeSuccess(ctx, http.StatusOK, resp)
+}
+
 func (h *Handler) GetArticleByID(ctx *gin.Context) {
 	resp, err := h.service.GetDetail(ctx.Param("id"), currentUserIDFromRequest(ctx))
 	if err != nil {
@@ -164,4 +180,16 @@ func currentUserIDFromRequest(ctx *gin.Context) uint {
 		return 0
 	}
 	return claims.UserID
+}
+
+func userIDFromGinContext(ctx *gin.Context) uint {
+	value, exists := ctx.Get("userID")
+	if !exists {
+		return 0
+	}
+	userID, ok := value.(uint)
+	if !ok {
+		return 0
+	}
+	return userID
 }

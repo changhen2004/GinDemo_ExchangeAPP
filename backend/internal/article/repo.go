@@ -10,6 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 	"resource_community_go/internal/cachekey"
+	"resource_community_go/internal/social"
 )
 
 type Repo struct {
@@ -57,6 +58,43 @@ func (r *Repo) List(query ListArticlesQuery) ([]Article, error) {
 	//分页查询文章列表：计算 SQL 分页里的“跳过多少条”
 	offset := (query.Page - 1) * query.PageSize
 	if err := db.Offset(offset).Limit(query.PageSize).Find(&articles).Error; err != nil {
+		return nil, err
+	}
+	return articles, nil
+}
+
+func (r *Repo) ListFollowing(ctx context.Context, query FollowingFeedQuery) ([]Article, error) {
+	ctx = normalizeContext(ctx)
+	if query.FollowerID == 0 {
+		return []Article{}, nil
+	}
+	if query.PageSize < 1 {
+		query.PageSize = 10
+	}
+
+	followingSubQuery := r.db.WithContext(ctx).
+		Model(&social.Follow{}).
+		Select("author_id").
+		Where("follower_id = ?", query.FollowerID)
+
+	db := r.db.WithContext(ctx).
+		Model(&Article{}).
+		Where("author_id IN (?)", followingSubQuery).
+		Where("status = ?", "published").
+		Order("created_at DESC").
+		Order("id DESC")
+
+	if !query.BeforeCreatedAt.IsZero() && query.BeforeID > 0 {
+		db = db.Where(
+			"(created_at < ?) OR (created_at = ? AND id < ?)",
+			query.BeforeCreatedAt,
+			query.BeforeCreatedAt,
+			query.BeforeID,
+		)
+	}
+
+	var articles []Article
+	if err := db.Limit(query.PageSize).Find(&articles).Error; err != nil {
 		return nil, err
 	}
 	return articles, nil

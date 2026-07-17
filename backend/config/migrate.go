@@ -6,6 +6,7 @@ import (
 	"resource_community_go/internal/comment"
 	"resource_community_go/internal/favorite"
 	"resource_community_go/internal/points"
+	"resource_community_go/internal/social"
 
 	"gorm.io/gorm"
 )
@@ -20,5 +21,6 @@ func Migrate(db *gorm.DB) error {
 		&points.PointLedger{},
 		&points.UserCheckIn{},
 		&points.UserPrivilege{},
+		&social.Follow{},
 	)
 }

@@ -9,18 +9,20 @@ import (
 )
 
 const (
-	ArticleListPrefix   = "articles:list:"
-	ArticleDetailPrefix = "articles:detail:"
-	ArticleHotPrefix    = "articles:hot:"
-	ArticleHotZSetKey   = "articles:hot:zset"
-	PointsSummaryPrefix = "points:summary:"
+	ArticleListPrefix      = "articles:list:"
+	ArticleDetailPrefix    = "articles:detail:"
+	ArticleHotPrefix       = "articles:hot:"
+	ArticleFollowingPrefix = "articles:following:"
+	ArticleHotZSetKey      = "articles:hot:zset"
+	PointsSummaryPrefix    = "points:summary:"
 )
 
 const (
-	ArticleListTTL   = 5 * time.Minute
-	ArticleDetailTTL = 10 * time.Minute
-	ArticleHotTTL    = 3 * time.Minute
-	PointsSummaryTTL = 2 * time.Minute
+	ArticleListTTL      = 5 * time.Minute
+	ArticleDetailTTL    = 10 * time.Minute
+	ArticleHotTTL       = 3 * time.Minute
+	ArticleFollowingTTL = 45 * time.Second
+	PointsSummaryTTL    = 2 * time.Minute
 )
 
 func ArticleListKey(page, pageSize int, sort, keyword, tag string) string {
@@ -41,6 +43,20 @@ func ArticleDetailKey(articleID string) string {
 
 func ArticleHotKey(limit int) string {
 	return fmt.Sprintf("%slimit=%d", ArticleHotPrefix, limit)
+}
+
+func ArticleFollowingPrefixForUser(userID uint) string {
+	return fmt.Sprintf("%suser=%d:", ArticleFollowingPrefix, userID)
+}
+
+func ArticleFollowingKey(userID uint, pageSize int, beforeCreatedAt string, beforeID uint) string {
+	return fmt.Sprintf(
+		"%ssize=%d:beforeCreatedAt=%s:beforeID=%d",
+		ArticleFollowingPrefixForUser(userID),
+		pageSize,
+		beforeCreatedAt,
+		beforeID,
+	)
 }
 
 func PointsSummaryKey(userID uint) string {
