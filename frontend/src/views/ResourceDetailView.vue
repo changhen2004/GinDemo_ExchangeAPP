@@ -87,11 +87,20 @@
             <div class="author-avatar">
               {{ resource.author?.username?.slice(0, 1) || 'U' }}
             </div>
-            <div>
+            <div class="author-copy">
               <p class="summary-kicker">Author</p>
               <h2>{{ resource.author?.username || '匿名作者' }}</h2>
               <span>作者 ID #{{ resource.author?.id || resource.authorId }}</span>
             </div>
+            <el-button
+              v-if="canShowFollowButton"
+              class="follow-button"
+              :type="authorSocialStatus?.isFollowing ? 'default' : 'primary'"
+              :loading="followSubmitting"
+              @click="handleFollowToggle"
+            >
+              {{ authorSocialStatus?.isFollowing ? '取消关注' : '关注作者' }}
+            </el-button>
           </div>
 
           <div class="summary-divider"></div>
@@ -106,8 +115,12 @@
               <strong>{{ resource.stats?.commentCount ?? resource.commentCount ?? 0 }}</strong>
             </article>
             <article>
-              <span>收藏</span>
-              <strong>{{ resource.stats?.favoriteCount ?? resource.favoriteCount ?? 0 }}</strong>
+              <span>粉丝</span>
+              <strong>{{ authorSocialStatus?.followerCount ?? 0 }}</strong>
+            </article>
+            <article>
+              <span>关注</span>
+              <strong>{{ authorSocialStatus?.followingCount ?? 0 }}</strong>
             </article>
           </div>
         </section>
@@ -334,13 +347,21 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { getArticleDetail, getArticleLikes, likeArticle, listArticles } from '../api/article';
+import {
+  followAuthor,
+  getArticleDetail,
+  getArticleLikes,
+  getAuthorSocialStatus,
+  likeArticle,
+  listArticles,
+  unfollowAuthor,
+} from '../api/article';
 import { createComment, deleteComment, listComments, type Comment } from '../api/comment';
 import { favoriteArticle, listMyFavorites, unfavoriteArticle } from '../api/favorite';
 import { unlockArticle } from '../api/points';
 import ResourceStoryCard from '../components/ResourceStoryCard.vue';
 import { useAuthStore } from '../store/auth';
-import type { ResourceDetail, ResourceSummary } from '../types/resource';
+import type { AuthorSocialStatus, ResourceDetail, ResourceSummary } from '../types/resource';
 
 const route = useRoute();
 const router = useRouter();
@@ -360,6 +381,8 @@ const deletingCommentId = ref<number | null>(null);
 const commentErrorMessage = ref('');
 const favoriteSubmitting = ref(false);
 const isFavorited = ref(false);
+const followSubmitting = ref(false);
+const authorSocialStatus = ref<AuthorSocialStatus | null>(null);
 
 const resourceID = String(route.params.id);
 
@@ -371,6 +394,13 @@ const shouldShowUnlockButton = computed(() => {
 });
 
 const primaryTag = computed(() => resource.value?.tags?.[0]?.trim() || '');
+const authorID = computed(() => resource.value?.author?.id || resource.value?.authorId || 0);
+const canShowFollowButton = computed(() => {
+  if (!authStore.isAuthenticated || !authorID.value) {
+    return false;
+  }
+  return authStore.currentUser?.userID !== authorID.value;
+});
 
 const gateState = computed(() => {
   if (!resource.value) {
@@ -427,6 +457,20 @@ const fetchResource = async () => {
   resource.value = await getArticleDetail(resourceID);
 };
 
+const fetchAuthorSocialStatus = async () => {
+  if (!authorID.value) {
+    authorSocialStatus.value = null;
+    return;
+  }
+
+  try {
+    authorSocialStatus.value = await getAuthorSocialStatus(authorID.value);
+  } catch (error) {
+    console.error('Failed to load author social status:', error);
+    authorSocialStatus.value = null;
+  }
+};
+
 const fetchLikes = async () => {
   const response = await getArticleLikes(resourceID);
   likes.value = response.likes;
@@ -479,7 +523,7 @@ const fetchPageData = async () => {
 
   try {
     await fetchResource();
-    await Promise.all([fetchLikes(), fetchComments(), fetchRelatedResources()]);
+    await Promise.all([fetchLikes(), fetchComments(), fetchRelatedResources(), fetchAuthorSocialStatus()]);
     await syncFavoriteState();
   } catch (error) {
     console.error('Failed to load resource detail:', error);
@@ -570,6 +614,27 @@ const handleFavoriteToggle = async () => {
     ElMessage.error('收藏操作失败，请稍后再试。');
   } finally {
     favoriteSubmitting.value = false;
+  }
+};
+
+const handleFollowToggle = async () => {
+  if (!authStore.isAuthenticated || !authorID.value) {
+    ElMessage.error('请先登录后再关注作者');
+    return;
+  }
+
+  followSubmitting.value = true;
+  try {
+    const response = authorSocialStatus.value?.isFollowing
+      ? await unfollowAuthor(authorID.value)
+      : await followAuthor(authorID.value);
+    authorSocialStatus.value = response.status;
+    ElMessage.success(response.message === 'unfollowed' ? '已取消关注' : '关注成功');
+  } catch (error) {
+    console.error('Failed to update follow state:', error);
+    ElMessage.error('关注操作失败，请稍后再试。');
+  } finally {
+    followSubmitting.value = false;
   }
 };
 
@@ -861,6 +926,16 @@ onMounted(fetchPageData);
   font-size: 13px;
 }
 
+.author-copy {
+  min-width: 0;
+}
+
+.follow-button {
+  margin-left: 8px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
 .summary-divider {
   width: 1px;
   height: 100%;
@@ -869,7 +944,7 @@ onMounted(fetchPageData);
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 

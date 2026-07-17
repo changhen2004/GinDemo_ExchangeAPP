@@ -33,3 +33,26 @@ export interface ResourceDetail extends ResourceSummary {
 export interface ResourceLike {
   likes: number;
 }
+
+export interface FollowingFeedCursor {
+  beforeCreatedAt: string;
+  beforeId: number;
+}
+
+export interface FollowingFeedResponse {
+  items: ResourceSummary[];
+  nextCursor?: FollowingFeedCursor;
+  hasMore: boolean;
+}
+
+export interface AuthorSocialStatus {
+  authorId: number;
+  isFollowing: boolean;
+  followerCount: number;
+  followingCount: number;
+}
+
+export interface FollowActionResponse {
+  message: string;
+  status: AuthorSocialStatus;
+}

@@ -17,12 +17,12 @@
 
           <div class="active-filters">
             <button
-              v-if="state.sort"
+              v-if="state.feed"
               type="button"
               class="active-filter"
-              @click="navigateWithQuery({ sort: 'latest', page: 1 })"
+              @click="navigateWithQuery({ feed: 'latest', page: 1 })"
             >
-              {{ state.sort === 'hot' ? '热度优先' : '最新发布' }}
+              {{ feedLabel }}
             </button>
             <button
               v-if="state.keyword"
@@ -72,7 +72,7 @@
           <div class="catalog-hero__stats">
             <article>
               <span>排序方式</span>
-              <strong>{{ state.sort === 'hot' ? '热度' : '最新' }}</strong>
+              <strong>{{ feedLabel }}</strong>
             </article>
             <article>
               <span>每页数量</span>
@@ -87,18 +87,19 @@
               v-model="draftKeyword"
               class="search-box"
               clearable
+              :disabled="state.feed === 'following'"
               placeholder="搜索标题关键词"
               @keyup.enter="applyFilters"
             >
               <template #append>
-                <el-button @click="applyFilters">搜索</el-button>
+                <el-button :disabled="state.feed === 'following'" @click="applyFilters">搜索</el-button>
               </template>
             </el-input>
 
             <el-segmented
-              v-model="state.sort"
-              :options="sortOptions"
-              @change="onSortChange"
+              v-model="state.feed"
+              :options="feedOptions"
+              @change="onFeedChange"
             />
           </div>
 
@@ -108,6 +109,7 @@
               <button
                 type="button"
                 :class="['filter-chip', { 'filter-chip--active': state.tag === '' }]"
+                :disabled="state.feed === 'following'"
                 @click="selectTag('')"
               >
                 全部
@@ -117,6 +119,7 @@
                 :key="tag"
                 type="button"
                 :class="['filter-chip', { 'filter-chip--active': state.tag === tag }]"
+                :disabled="state.feed === 'following'"
                 @click="selectTag(tag)"
               >
                 {{ tag }}
@@ -155,7 +158,10 @@
         <section v-else-if="errorMessage" class="state-panel">
           <el-result icon="warning" title="加载失败" :sub-title="errorMessage">
             <template #extra>
-              <el-button type="primary" @click="fetchResources">重新加载</el-button>
+              <el-button v-if="state.feed === 'following' && !authStore.isAuthenticated" type="primary" @click="goToLogin">
+                去登录
+              </el-button>
+              <el-button v-else type="primary" @click="fetchResources">重新加载</el-button>
             </template>
           </el-result>
         </section>
@@ -181,10 +187,10 @@
           </el-button>
           <div class="page-indicator">
             <span>第 {{ state.page }} 页</span>
-            <small v-if="resources.length < state.pageSize">已到达最后一页</small>
+            <small v-if="!canGoNext">已到达最后一页</small>
           </div>
           <el-button
-            :disabled="loading || resources.length < state.pageSize"
+            :disabled="!canGoNext"
             @click="changePage(state.page + 1)"
           >
             下一页
@@ -198,37 +204,41 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { listArticles } from '../api/article';
+import { listArticles, listFollowingArticles } from '../api/article';
 import ResourceStoryCard from '../components/ResourceStoryCard.vue';
-import type { ResourceSummary } from '../types/resource';
+import { useAuthStore } from '../store/auth';
+import type { FollowingFeedCursor, ResourceSummary } from '../types/resource';
 
-type SortMode = 'latest' | 'hot';
+type FeedMode = 'latest' | 'following' | 'hot';
 
 interface CatalogState {
   page: number;
   pageSize: number;
-  sort: SortMode;
+  feed: FeedMode;
   keyword: string;
   tag: string;
 }
 
 const router = useRouter();
 const route = useRoute();
+const authStore = useAuthStore();
 const resources = ref<ResourceSummary[]>([]);
 const loading = ref(false);
 const errorMessage = ref('');
 const draftKeyword = ref('');
+const followingCursors = ref<Record<number, FollowingFeedCursor | undefined>>({ 1: undefined });
 const state = reactive<CatalogState>({
   page: 1,
   pageSize: 6,
-  sort: 'latest',
+  feed: 'latest',
   keyword: '',
   tag: '',
 });
 
-const sortOptions = [
-  { label: '最新发布', value: 'latest' },
-  { label: '热度优先', value: 'hot' },
+const feedOptions = [
+  { label: '最新资源流', value: 'latest' },
+  { label: '关注流', value: 'following' },
+  { label: '热门资源流', value: 'hot' },
 ];
 
 const pageSizeOptions = [6, 12, 18];
@@ -248,21 +258,43 @@ const availableTags = computed(() => {
 
 const skeletonCount = computed(() => state.pageSize);
 
+const feedLabel = computed(() => {
+  if (state.feed === 'following') {
+    return '关注流';
+  }
+  return state.feed === 'hot' ? '热门' : '最新';
+});
+
+const canGoNext = computed(() => {
+  if (loading.value) {
+    return false;
+  }
+  if (state.feed === 'following') {
+    return !!followingCursors.value[state.page + 1];
+  }
+  return resources.value.length >= state.pageSize;
+});
+
 const parsePositiveNumber = (value: unknown, fallback: number) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
 const normalizeQuery = (query: Record<string, unknown>): CatalogState => {
-  const sort = query.sort === 'hot' ? 'hot' : 'latest';
+  let feed: FeedMode = 'latest';
+  if (query.feed === 'following') {
+    feed = 'following';
+  } else if (query.feed === 'hot' || query.sort === 'hot') {
+    feed = 'hot';
+  }
   return {
-    page: parsePositiveNumber(query.page, 1),
+    page: feed === 'following' ? 1 : parsePositiveNumber(query.page, 1),
     pageSize: [6, 12, 18].includes(Number(query.pageSize))
       ? Number(query.pageSize)
       : 6,
-    sort,
-    keyword: typeof query.keyword === 'string' ? query.keyword : '',
-    tag: typeof query.tag === 'string' ? query.tag : '',
+    feed,
+    keyword: feed === 'following' ? '' : typeof query.keyword === 'string' ? query.keyword : '',
+    tag: feed === 'following' ? '' : typeof query.tag === 'string' ? query.tag : '',
   };
 };
 
@@ -270,7 +302,7 @@ const buildRouteQuery = (nextState: CatalogState) => {
   return {
     ...(nextState.page > 1 ? { page: String(nextState.page) } : {}),
     ...(nextState.pageSize !== 6 ? { pageSize: String(nextState.pageSize) } : {}),
-    ...(nextState.sort !== 'latest' ? { sort: nextState.sort } : {}),
+    ...(nextState.feed !== 'latest' ? { feed: nextState.feed } : {}),
     ...(nextState.keyword ? { keyword: nextState.keyword } : {}),
     ...(nextState.tag ? { tag: nextState.tag } : {}),
   };
@@ -281,10 +313,28 @@ const fetchResources = async () => {
   errorMessage.value = '';
 
   try {
+    if (state.feed === 'following') {
+      if (!authStore.isAuthenticated) {
+        resources.value = [];
+        errorMessage.value = '请先登录后查看你关注作者发布的资源。';
+        return;
+      }
+
+      const cursor = followingCursors.value[state.page];
+      const response = await listFollowingArticles({
+        pageSize: state.pageSize,
+        beforeCreatedAt: cursor?.beforeCreatedAt,
+        beforeId: cursor?.beforeId,
+      });
+      resources.value = response.items;
+      followingCursors.value[state.page + 1] = response.nextCursor;
+      return;
+    }
+
     resources.value = await listArticles({
       page: state.page,
       pageSize: state.pageSize,
-      sort: state.sort,
+      sort: state.feed === 'hot' ? 'hot' : 'latest',
       keyword: state.keyword || undefined,
       tag: state.tag || undefined,
     });
@@ -309,6 +359,9 @@ const navigateWithQuery = (patch: Partial<CatalogState>) => {
 };
 
 const applyFilters = () => {
+  if (state.feed === 'following') {
+    return;
+  }
   navigateWithQuery({
     page: 1,
     keyword: draftKeyword.value.trim(),
@@ -317,24 +370,32 @@ const applyFilters = () => {
 
 const resetFilters = () => {
   draftKeyword.value = '';
+  followingCursors.value = { 1: undefined };
   router.replace({ name: 'Resources', query: {} });
 };
 
 const selectTag = (tag: string) => {
+  if (state.feed === 'following') {
+    return;
+  }
   navigateWithQuery({
     page: 1,
     tag,
   });
 };
 
-const onSortChange = () => {
+const onFeedChange = () => {
+  followingCursors.value = { 1: undefined };
   navigateWithQuery({
     page: 1,
-    sort: state.sort,
+    feed: state.feed,
+    keyword: state.feed === 'following' ? '' : state.keyword,
+    tag: state.feed === 'following' ? '' : state.tag,
   });
 };
 
 const onPageSizeChange = () => {
+  followingCursors.value = { 1: undefined };
   navigateWithQuery({
     page: 1,
     pageSize: state.pageSize,
@@ -345,8 +406,15 @@ const changePage = (page: number) => {
   if (page < 1 || loading.value) {
     return;
   }
+  if (state.feed === 'following' && page > state.page && !followingCursors.value[page]) {
+    return;
+  }
 
   navigateWithQuery({ page });
+};
+
+const goToLogin = () => {
+  router.push({ name: 'Login' });
 };
 
 watch(
@@ -355,7 +423,7 @@ watch(
     const normalized = normalizeQuery(query as Record<string, unknown>);
     state.page = normalized.page;
     state.pageSize = normalized.pageSize;
-    state.sort = normalized.sort;
+    state.feed = normalized.feed;
     state.keyword = normalized.keyword;
     state.tag = normalized.tag;
     draftKeyword.value = normalized.keyword;
