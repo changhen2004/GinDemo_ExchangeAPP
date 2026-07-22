@@ -16,6 +16,7 @@ const (
 	CoverMaxSizeBytes        int64 = 2 << 20
 	ContentImageMaxSizeBytes int64 = 5 << 20
 	ContentImageMaxCount           = 6
+	publicUploadPath               = "/uploads"
 	coverSubDir                    = "covers"
 	contentSubDir                  = "content"
 )
@@ -116,7 +117,11 @@ func (s *Service) saveImage(fileHeader *multipart.FileHeader, subDir string, max
 		return "", err
 	}
 
-	return "/" + filepath.ToSlash(dstPath), nil
+	return publicURL(subDir, filename), nil
+}
+
+func publicURL(subDir, filename string) string {
+	return publicUploadPath + "/" + subDir + "/" + filename
 }
 
 func sanitizeFilename(name string) string {
