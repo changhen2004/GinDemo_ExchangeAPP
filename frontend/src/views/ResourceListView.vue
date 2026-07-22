@@ -458,15 +458,21 @@ watch(
 .state-panel {
   border: 1px solid rgba(56, 61, 64, 0.08);
   border-radius: 24px;
-  background: rgba(251, 250, 245, 0.88);
-  box-shadow: 0 20px 44px rgba(45, 51, 54, 0.08);
-  backdrop-filter: blur(14px);
+  background: rgba(251, 250, 245, 0.96);
+  box-shadow: 0 8px 28px rgba(45, 51, 54, 0.06);
+}
+
+.catalog-hero,
+.toolbar-panel,
+.state-panel {
+  contain: layout paint;
 }
 
 .side-panel {
   position: sticky;
   top: 108px;
   padding: 20px;
+  contain: layout;
 }
 
 .side-kicker,

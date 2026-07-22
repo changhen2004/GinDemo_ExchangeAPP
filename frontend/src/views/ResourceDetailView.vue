@@ -31,6 +31,7 @@
               :src="resource.coverUrl"
               :alt="resource.title"
               class="hero-cover"
+              decoding="async"
             />
             <div v-else class="hero-cover hero-cover--placeholder">
               <span>{{ resource.title.slice(0, 1) }}</span>
@@ -149,6 +150,8 @@
               :key="`${image}-${index}`"
               :src="image"
               :alt="`${resource.title} 配图 ${index + 1}`"
+              loading="lazy"
+              decoding="async"
             />
           </div>
         </section>
@@ -703,9 +706,22 @@ onMounted(fetchPageData);
 .sidebar-panel {
   border: 1px solid rgba(56, 61, 64, 0.08);
   border-radius: 26px;
-  background: rgba(251, 250, 245, 0.88);
-  box-shadow: 0 20px 44px rgba(45, 51, 54, 0.08);
-  backdrop-filter: blur(14px);
+  background: rgba(251, 250, 245, 0.96);
+  box-shadow: 0 8px 28px rgba(45, 51, 54, 0.06);
+}
+
+.detail-skeleton,
+.state-panel,
+.hero-panel,
+.summary-panel,
+.reading-panel,
+.related-panel,
+.comment-panel {
+  contain: layout paint;
+}
+
+.sidebar-panel {
+  contain: layout;
 }
 
 .detail-skeleton,
@@ -799,8 +815,7 @@ onMounted(fetchPageData);
   align-items: center;
   padding: 10px 14px;
   border-radius: 999px;
-  background: rgba(16, 21, 24, 0.52);
-  backdrop-filter: blur(10px);
+  background: rgba(16, 21, 24, 0.66);
 }
 
 .hero-topbar__meta span,
@@ -865,8 +880,7 @@ onMounted(fetchPageData);
 .hero-meta-card {
   padding: 18px;
   border-radius: 20px;
-  background: rgba(251, 250, 245, 0.15);
-  backdrop-filter: blur(10px);
+  background: rgba(251, 250, 245, 0.2);
 }
 
 .hero-meta-card span {

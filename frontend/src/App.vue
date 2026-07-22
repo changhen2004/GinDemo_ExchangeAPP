@@ -127,9 +127,11 @@ const handleLogout = async () => {
   padding: 14px 18px;
   border: 1px solid rgba(34, 41, 46, 0.08);
   border-radius: 22px;
-  background: rgba(250, 249, 245, 0.78);
-  box-shadow: 0 14px 34px rgba(51, 59, 64, 0.08);
-  backdrop-filter: blur(16px);
+  background: rgba(250, 249, 245, 0.96);
+  box-shadow: 0 8px 24px rgba(51, 59, 64, 0.06);
+  contain: layout paint;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .site-brand,

@@ -67,6 +67,8 @@
                   v-if="headlineResource.coverUrl"
                   :src="headlineResource.coverUrl"
                   :alt="headlineResource.title"
+                  loading="lazy"
+                  decoding="async"
                 />
                 <div v-else class="headline-card__placeholder">
                   {{ headlineResource.title.slice(0, 1) }}
@@ -350,9 +352,15 @@ onMounted(fetchHomeFeed);
 .hero-mini-feed {
   border: 1px solid rgba(56, 61, 64, 0.08);
   border-radius: 26px;
-  background: rgba(251, 250, 245, 0.88);
-  box-shadow: 0 20px 44px rgba(45, 51, 54, 0.08);
-  backdrop-filter: blur(14px);
+  background: rgba(251, 250, 245, 0.96);
+  box-shadow: 0 8px 28px rgba(45, 51, 54, 0.06);
+}
+
+.hero-panel,
+.section-panel,
+.headline-card,
+.hero-mini-feed {
+  contain: layout paint;
 }
 
 .aside-card {
@@ -362,6 +370,7 @@ onMounted(fetchHomeFeed);
   flex-direction: column;
   gap: 12px;
   padding: 18px;
+  contain: layout;
 }
 
 .aside-card--muted {

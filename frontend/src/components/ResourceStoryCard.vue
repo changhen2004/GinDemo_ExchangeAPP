@@ -10,6 +10,8 @@
         :src="resource.coverUrl"
         :alt="resource.title"
         class="story-card__image"
+        loading="lazy"
+        decoding="async"
       />
       <div v-else class="story-card__placeholder">
         <span>{{ resource.title.slice(0, 1) }}</span>
@@ -88,9 +90,10 @@ const goDetail = () => {
   overflow: hidden;
   border: 1px solid rgba(75, 77, 79, 0.12);
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 18px 40px rgba(34, 41, 46, 0.08);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 8px 26px rgba(34, 41, 46, 0.06);
   cursor: pointer;
+  contain: layout paint;
   transition:
     transform 0.22s ease,
     box-shadow 0.22s ease,
@@ -141,9 +144,8 @@ const goDetail = () => {
   align-items: center;
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(12, 17, 20, 0.72);
+  background: rgba(12, 17, 20, 0.82);
   color: #f7efe4;
-  backdrop-filter: blur(10px);
 }
 
 .story-card__ribbon span,

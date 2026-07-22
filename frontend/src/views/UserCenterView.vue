@@ -87,7 +87,13 @@
                 @click="goToArticle(favorite.id)"
               >
                 <div class="favorite-cover">
-                  <img v-if="favorite.coverUrl" :src="favorite.coverUrl" :alt="favorite.title" />
+                  <img
+                    v-if="favorite.coverUrl"
+                    :src="favorite.coverUrl"
+                    :alt="favorite.title"
+                    loading="lazy"
+                    decoding="async"
+                  />
                   <div v-else class="favorite-cover--placeholder">{{ favorite.title.slice(0, 1) }}</div>
                 </div>
                 <div class="favorite-body">
@@ -344,9 +350,9 @@ onMounted(async () => {
 .state-panel {
   border: 1px solid rgba(92, 53, 34, 0.08);
   border-radius: 26px;
-  background: rgba(255, 251, 247, 0.86);
-  box-shadow: 0 18px 40px rgba(84, 53, 37, 0.08);
-  backdrop-filter: blur(16px);
+  background: rgba(255, 251, 247, 0.96);
+  box-shadow: 0 8px 28px rgba(84, 53, 37, 0.06);
+  contain: layout paint;
 }
 
 .center-hero {

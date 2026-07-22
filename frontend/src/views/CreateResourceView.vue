@@ -321,9 +321,9 @@ const handleSubmit = async () => {
 .upload-card {
   border: 1px solid rgba(101, 58, 37, 0.08);
   border-radius: 28px;
-  background: rgba(255, 252, 247, 0.9);
-  box-shadow: 0 18px 42px rgba(84, 53, 37, 0.08);
-  backdrop-filter: blur(14px);
+  background: rgba(255, 252, 247, 0.96);
+  box-shadow: 0 8px 28px rgba(84, 53, 37, 0.06);
+  contain: layout paint;
 }
 
 .create-hero {
