@@ -3,6 +3,7 @@ package cachekey
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -15,14 +16,16 @@ const (
 	ArticleFollowingPrefix = "articles:following:"
 	ArticleHotZSetKey      = "articles:hot:zset"
 	PointsSummaryPrefix    = "points:summary:"
+	CacheNullValue         = "__NULL__"
 )
 
 const (
-	ArticleListTTL      = 5 * time.Minute
-	ArticleDetailTTL    = 10 * time.Minute
-	ArticleHotTTL       = 3 * time.Minute
-	ArticleFollowingTTL = 45 * time.Second
-	PointsSummaryTTL    = 2 * time.Minute
+	ArticleListTTL       = 5 * time.Minute
+	ArticleDetailTTL     = 10 * time.Minute
+	ArticleDetailNullTTL = 30 * time.Second
+	ArticleHotTTL        = 3 * time.Minute
+	ArticleFollowingTTL  = 45 * time.Second
+	PointsSummaryTTL     = 2 * time.Minute
 )
 
 func ArticleListKey(page, pageSize int, sort, keyword, tag string) string {
@@ -61,6 +64,19 @@ func ArticleFollowingKey(userID uint, pageSize int, beforeCreatedAt string, befo
 
 func PointsSummaryKey(userID uint) string {
 	return fmt.Sprintf("%s%d", PointsSummaryPrefix, userID)
+}
+
+func JitterTTL(base time.Duration) time.Duration {
+	if base <= 0 {
+		return base
+	}
+
+	maxJitter := base / 5
+	if maxJitter <= 0 {
+		return base
+	}
+
+	return base + time.Duration(rand.Int63n(int64(maxJitter)+1))
 }
 
 func DeleteByPrefix(ctx context.Context, redisDB *redis.Client, prefix string) {

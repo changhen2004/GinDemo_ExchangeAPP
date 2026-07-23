@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"sync"
 	"time"
 
 	"resource_community_go/internal/asyncjob"
@@ -36,13 +37,26 @@ type Service struct {
 	repo          *Repo
 	publisher     asyncjob.Publisher
 	pointsService *internalPoints.Service
+	cacheFillMu   sync.Mutex
+	cacheFills    map[string]*articleDetailCacheFillCall
+}
+
+type articleDetailCacheFillCall struct {
+	done    chan struct{}
+	payload articleDetailCachePayload
+	err     error
 }
 
 func NewService(repo *Repo, publisher asyncjob.Publisher, pointsService *internalPoints.Service) *Service {
 	if publisher == nil {
 		publisher = asyncjob.NoopPublisher{}
 	}
-	return &Service{repo: repo, publisher: publisher, pointsService: pointsService}
+	return &Service{
+		repo:          repo,
+		publisher:     publisher,
+		pointsService: pointsService,
+		cacheFills:    make(map[string]*articleDetailCacheFillCall),
+	}
 }
 
 func (s *Service) Create(ctx context.Context, req CreateArticleRequest) (ArticleResponse, error) {
@@ -177,70 +191,130 @@ func (s *Service) FindByID(id string) (ArticleResponse, error) {
 func (s *Service) GetDetail(id string, currentUserID uint) (ArticleDetailResponse, error) {
 	ctx := context.Background()
 
-	article, err := s.repo.FindByID(id)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ArticleDetailResponse{}, ErrArticleNotFound
-		}
-		return ArticleDetailResponse{}, err
-	}
-	if err := s.publisher.Publish(ctx, asyncjob.Job{
-		Type: asyncjob.TypeArticleViewed,
-		Payload: map[string]uint{
-			"articleID": article.ID,
-		},
-	}); err != nil {
-		if err := s.RecordView(ctx, article.ID); err != nil {
-			return ArticleDetailResponse{}, err
-		}
-		article, err = s.repo.FindByID(id)
+	cacheKey := cachekey.ArticleDetailKey(id)
+	if payload, hit, err := s.getArticleDetailCachePayload(ctx, cacheKey); hit || err != nil {
 		if err != nil {
 			return ArticleDetailResponse{}, err
 		}
+		return s.articleDetailPayloadToResponse(ctx, payload, currentUserID)
 	}
 
-	cacheKey := cachekey.ArticleDetailKey(id)
-	cached, err := s.repo.GetArticlesCache(ctx, cacheKey)
-	if err == nil {
-		var payload articleDetailCachePayload
-		if unmarshalErr := json.Unmarshal([]byte(cached), &payload); unmarshalErr == nil {
-			payload.Stats.ViewCount = article.ViewCount
-			payload.Stats.CommentCount = article.CommentCount
-			isUnlocked, unlockErr := s.resolveUnlockStatus(Article{
-				Model:          gorm.Model{ID: article.ID},
-				AuthorID:       payload.Author.ID,
-				IsFree:         payload.IsFree,
-				RequiredPoints: payload.RequiredPoints,
-			}, currentUserID)
-			if unlockErr != nil {
-				return ArticleDetailResponse{}, unlockErr
-			}
-			if refreshedPayload, marshalErr := json.Marshal(payload); marshalErr == nil {
-				s.repo.SetArticlesCache(ctx, cacheKey, string(refreshedPayload), cachekey.ArticleDetailTTL)
-			}
-			return payload.toResponse(isUnlocked), nil
+	payload, err := s.doArticleDetailCacheFill(cacheKey, func() (articleDetailCachePayload, error) {
+		if payload, hit, err := s.getArticleDetailCachePayload(ctx, cacheKey); hit || err != nil {
+			return payload, err
 		}
+		return s.loadArticleDetailCachePayload(ctx, id, cacheKey)
+	})
+	if err != nil {
+		return ArticleDetailResponse{}, err
+	}
+	return s.articleDetailPayloadToResponse(ctx, payload, currentUserID)
+}
+
+func (s *Service) getArticleDetailCachePayload(ctx context.Context, cacheKey string) (articleDetailCachePayload, bool, error) {
+	cached, err := s.repo.GetArticlesCache(ctx, cacheKey)
+	if err != nil {
+		return articleDetailCachePayload{}, false, nil
 	}
 
+	if cached == cachekey.CacheNullValue {
+		return articleDetailCachePayload{}, true, ErrArticleNotFound
+	}
+
+	var payload articleDetailCachePayload
+	if unmarshalErr := json.Unmarshal([]byte(cached), &payload); unmarshalErr != nil {
+		return articleDetailCachePayload{}, false, nil
+	}
+	return payload, true, nil
+}
+
+func (s *Service) loadArticleDetailCachePayload(ctx context.Context, id, cacheKey string) (articleDetailCachePayload, error) {
+	article, err := s.repo.FindByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.repo.SetArticlesCache(ctx, cacheKey, cachekey.CacheNullValue, cachekey.JitterTTL(cachekey.ArticleDetailNullTTL))
+			return articleDetailCachePayload{}, ErrArticleNotFound
+		}
+		return articleDetailCachePayload{}, err
+	}
 	author, err := s.repo.FindAuthorByID(article.AuthorID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			author = ArticleAuthorResponse{}
 		} else {
-			return ArticleDetailResponse{}, err
+			return articleDetailCachePayload{}, err
 		}
 	}
 
-	isUnlocked, err := s.resolveUnlockStatus(*article, currentUserID)
+	response := toArticleDetailResponse(*article, author, false)
+	payload := newArticleDetailCachePayload(response)
+	if marshaled, marshalErr := json.Marshal(payload); marshalErr == nil {
+		s.repo.SetArticlesCache(ctx, cacheKey, string(marshaled), cachekey.JitterTTL(cachekey.ArticleDetailTTL))
+	}
+	return payload, nil
+}
+
+func (s *Service) publishArticleView(ctx context.Context, articleID uint) (bool, error) {
+	if articleID == 0 {
+		return false, nil
+	}
+
+	if err := s.publisher.Publish(ctx, asyncjob.Job{
+		Type: asyncjob.TypeArticleViewed,
+		Payload: map[string]uint{
+			"articleID": articleID,
+		},
+	}); err != nil {
+		if err := s.RecordView(ctx, articleID); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func (s *Service) articleDetailPayloadToResponse(ctx context.Context, payload articleDetailCachePayload, currentUserID uint) (ArticleDetailResponse, error) {
+	if recordedSynchronously, recordErr := s.publishArticleView(ctx, payload.ID); recordErr != nil {
+		return ArticleDetailResponse{}, recordErr
+	} else if recordedSynchronously {
+		payload.Stats.ViewCount++
+	}
+
+	isUnlocked, err := s.resolveUnlockStatus(Article{
+		Model:          gorm.Model{ID: payload.ID},
+		AuthorID:       payload.Author.ID,
+		IsFree:         payload.IsFree,
+		RequiredPoints: payload.RequiredPoints,
+	}, currentUserID)
 	if err != nil {
 		return ArticleDetailResponse{}, err
 	}
+	return payload.toResponse(isUnlocked), nil
+}
 
-	response := toArticleDetailResponse(*article, author, isUnlocked)
-	if payload, marshalErr := json.Marshal(newArticleDetailCachePayload(response)); marshalErr == nil {
-		s.repo.SetArticlesCache(ctx, cacheKey, string(payload), cachekey.ArticleDetailTTL)
+func (s *Service) doArticleDetailCacheFill(cacheKey string, fill func() (articleDetailCachePayload, error)) (articleDetailCachePayload, error) {
+	s.cacheFillMu.Lock()
+	if s.cacheFills == nil {
+		s.cacheFills = make(map[string]*articleDetailCacheFillCall)
 	}
-	return response, nil
+	if call, ok := s.cacheFills[cacheKey]; ok {
+		s.cacheFillMu.Unlock()
+		<-call.done
+		return call.payload, call.err
+	}
+
+	call := &articleDetailCacheFillCall{done: make(chan struct{})}
+	s.cacheFills[cacheKey] = call
+	s.cacheFillMu.Unlock()
+
+	call.payload, call.err = fill()
+	close(call.done)
+
+	s.cacheFillMu.Lock()
+	delete(s.cacheFills, cacheKey)
+	s.cacheFillMu.Unlock()
+
+	return call.payload, call.err
 }
 
 func (s *Service) Like(ctx context.Context, articleID string) (LikeActionResponse, error) {
