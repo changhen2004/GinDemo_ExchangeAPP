@@ -1,426 +1,425 @@
-# resource_community_go
+# Resource Community Platform
 
-基于 `Go + Gin + Gorm + Redis + RabbitMQ + Vue3` 的资源社区项目，补充了 Prometheus + Grafana 可观测性和本地压测演练脚本，用于记录 QPS、P50/P95、错误率等基础数据。
+基于 Go 构建的高并发内容社区服务平台，模拟真实互联网社区业务场景，围绕内容分发、用户互动、异步任务处理、缓存治理和可观测性体系进行工程化设计。
 
-## 项目介绍
+## 项目背景
 
-resource_community_go 是一个围绕“资源分享”场景构建的内容社区项目。  
-项目当前包含用户系统、资源发布、资源浏览、点赞、评论、收藏、关注作者、个性化 Feed、积分、签到、资源解锁、图片上传、热门资源流、异步 Worker、基础可观测性和压测演练报告等能力。
+Resource Community Platform 是一个面向资源分享场景的内容社区系统。
 
-这个项目不是单纯堆 CRUD，而是把一个内容社区的主链路做完整：
+项目参考互联网内容平台架构设计，实现用户从内容生产、内容分发到互动反馈的完整业务闭环。
 
-- 用户可以注册登录、发布资源、浏览资源、点赞评论收藏、关注作者，并通过积分解锁资源。
-- 资源广场支持最新资源流、关注流、热门资源流 3 类内容分发视图。
-- 浏览、点赞、评论、收藏等互动行为会影响热榜，热度由 Redis ZSet 维护。
-- 发布资源、浏览、点赞、评论、收藏等行为通过 RabbitMQ 投递异步任务，由 Worker 更新热度和积分。
-- 后端暴露 Prometheus 指标，Grafana 展示 QPS、P50/P95、错误率和路由维度延迟。
-- 提供本地演练脚本，生成可复盘的 Markdown 报告，作为压测和排障案例证据。
+### 系统覆盖
+
+- 用户认证体系
+- 内容发布与管理
+- Feed 流分发
+- 点赞评论收藏
+- 用户关注关系
+- 积分激励体系
+- 热榜计算
+- 异步任务处理
+- 服务监控与故障分析
+
+### 项目重点
+
+- 高并发读场景优化
+- 热点数据缓存治理
+- 异步任务解耦
+- 消息可靠性保证
+- 服务可观测性建设
+
+## 系统架构
+
+```text
+Client
+  |
+HTTP API
+  |
++---------------+
+|     Gin       |
++---------------+
+  |
++-------------+-------------+
+|                           |
+Business Service        Async Service
+|                           |
+MySQL Redis             RabbitMQ
+                                |
+                              Worker
+                                |
+                   +----------+----------+
+                   |                     |
+              热度计算              积分处理
+
+Prometheus
+  |
+Grafana
+```
 
 ## 技术栈
 
-### 后端
+### Backend
 
-- Go
-- Gin
-- Gorm
-- MySQL
-- Redis
-- RabbitMQ
-- JWT
-- Prometheus
-- Grafana
+| 技术 | 用途 |
+|---|---|
+| Go | 后端服务开发 |
+| Gin | HTTP API 框架 |
+| Gorm | ORM 数据访问 |
+| MySQL | 业务数据存储 |
+| Redis | 缓存、排行榜、热点数据 |
+| RabbitMQ | 异步任务消息队列 |
+| JWT | 用户认证 |
+| Prometheus | 指标采集 |
+| Grafana | 可视化监控 |
+| Docker Compose | 服务编排 |
 
-### 前端
+### Frontend
 
-- Vue 3
-- TypeScript
-- Pinia
-- Vue Router
-- Element Plus
-- Vite
+| 技术 | 用途 |
+|---|---|
+| Vue3 | 前端框架 |
+| TypeScript | 类型约束 |
+| Pinia | 状态管理 |
+| Vue Router | 路由管理 |
+| Element Plus | UI 组件 |
+| Vite | 构建工具 |
 
-## 功能
+## 核心业务模块
 
-| 模块 | 功能 |
-|------|------|
-| 账号 | 注册、登录、Refresh Token、登出、Bearer Token 鉴权 |
-| 资源 | 发布、列表、详情、分页、关键词搜索、标签筛选、最新/热门排序、资源解锁 |
-| Feed | 最新资源流、关注流、热门资源流、关注流游标分页、关注流缓存 |
-| 社交 | 关注作者、取消关注、关注状态、粉丝数、关注数 |
-| 点赞 | 点赞、点赞计数读取、RabbitMQ 异步落库、热度更新 |
-| 评论 | 评论列表、发布、删除、RabbitMQ 异步积分发放、热度更新 |
-| 收藏 | 收藏、取消收藏、我的收藏、热度更新 |
-| 积分 | 积分余额、积分流水、每日签到、发布奖励、互动奖励、权益兑换 |
-| 上传 | 封面图上传、正文配图上传 |
-| 热榜 | Redis ZSet 热榜、浏览/点赞/评论/收藏参与热度计算、热榜缓存 |
-| 缓存治理 | 资源详情空值缓存防穿透、TTL 抖动防雪崩、singleflight 合并热点回源防击穿 |
-| 消息治理 | RabbitMQ 有限重试、失败队列归档、Redis 幂等消费 |
-| 可观测性 | `/metrics` 指标暴露、Prometheus 抓取、Grafana 仪表盘、P50/P95、QPS、错误率 |
-| 演练 | 本地压测脚本、Prometheus 指标快照、Markdown 演练报告 |
-| 工程 | Docker Compose、API/Worker 拆分运行、健康检查、pprof、GitHub Actions CI/CD |
+### 用户认证
 
-## 项目结构
+实现完整用户生命周期：
+
+- 用户注册
+- 登录
+- Refresh Token
+- JWT 鉴权
+- 登出
+
+认证流程：
 
 ```text
-resource_community_go/
+用户登录
+  |
+生成 Access Token + Refresh Token
+  |
+访问业务接口
+  |
+JWT Middleware 校验
+```
+
+### 内容服务
+
+支持：
+
+- 内容发布
+- 内容列表
+- 内容详情
+- 分类筛选
+- 标签搜索
+- 资源解锁
+
+核心接口：
+
+```text
+GET    /articles
+GET    /articles/:id
+POST   /articles
+POST   /articles/:id/unlock
+```
+
+### Feed 分发系统
+
+系统提供三类内容流。
+
+#### 最新流
+
+按照发布时间倒序返回：
+
+```text
+created_at DESC
+```
+
+#### 关注流
+
+针对关注关系设计：
+
+- 游标分页
+- 用户级缓存
+
+分页方式：
+
+```text
+(created_at, id)
+instead of
+offset pagination
+```
+
+避免大数据量情况下 offset 查询性能下降。
+
+#### 热门流
+
+基于 Redis ZSet 实现：
+
+```text
+article_id -> score
+
+score =
+浏览权重
++ 点赞权重
++ 评论权重
++ 收藏权重
+```
+
+## 高并发优化设计
+
+### Redis 缓存治理
+
+资源详情采用：
+
+```text
+Request
+  |
+Redis Cache
+  |
+Miss
+  |
+MySQL
+```
+
+针对缓存异常场景增加：
+
+- 缓存穿透
+- 缓存雪崩
+- 缓存击穿
+
+缓存穿透方案：
+
+- 空值缓存
+- 不存在资源 ID 写入 `article:not_found`
+- TTL: `60s`
+
+缓存雪崩方案：
+
+- TTL 随机化
+- `expire = 3600 + random()`
+
+避免大量 Key 同时失效。
+
+缓存击穿方案：
+
+- `singleflight` 请求合并
+- 1000 请求只触发 1 次 DB 查询
+
+## 异步任务架构
+
+用户行为不会直接阻塞主链路。
+
+例如点赞流程：
+
+```text
+Client
+  |
+API
+  |
+更新点赞状态
+  |
+RabbitMQ
+  |
+Worker
+  |
+更新:
+- 热榜
+- 积分
+- 统计数据
+```
+
+收益：
+
+- 降低接口响应时间
+- 提高系统吞吐能力
+- 解耦业务模块
+
+## RabbitMQ 可靠性设计
+
+针对消息可靠性，实现：
+
+### 消息重试
+
+- `retry_count < 3` 时重新投递
+- `retry_count >= 3` 时进入 DLQ
+
+### 死信队列
+
+异常消息进入 `xxx.dlq`，并保存：
+
+- 原始消息
+- 失败原因
+- 重试次数
+
+方便后续人工处理。
+
+### 幂等消费
+
+Worker 使用 Redis 维护：
+
+```text
+message_id
+processing
+done
+```
+
+避免：
+
+- 重复积分
+- 重复增加热度
+- 重复统计
+
+## 可观测性建设
+
+系统集成：
+
+```text
+Go Service
+  |
+/metrics
+  |
+Prometheus
+  |
+Grafana
+```
+
+采集指标：
+
+- 服务指标
+- QPS
+- P50 latency
+- P95 latency
+- HTTP error rate
+- 路由指标
+
+示例路由：
+
+- `GET /articles`
+- `GET /articles/hot`
+- `GET /articles/:id`
+
+分别统计：
+
+- 请求量
+- 延迟
+- 错误率
+
+## 压测验证
+
+测试环境：
+
+- Docker Compose
+- CPU: 本地开发环境
+- Duration: `90s`
+- Concurrency: `12`
+
+测试结果：
+
+| 指标 | 结果 |
+|---|---|
+| 总请求 | 67955 |
+| 服务端 QPS | 476 req/s |
+| P50 | 2.5ms |
+| P95 | 4.8ms |
+| HTTP 非 2xx | 0% |
+| 5xx 错误 | 0% |
+
+说明：
+
+系统在持续压力访问下保持稳定响应。
+
+## OnCallAgent 联动
+
+项目提供真实业务监控数据：
+
+```text
+Resource Community
+  |
+Prometheus
+  |
+Alert
+  |
+OnCallAgent
+  |
+RAG + Agent
+  |
+生成排障方案
+```
+
+支持场景：
+
+| 问题 | 排查文档 |
+|---|---|
+| 接口 P95 升高 | `resource-community-p95-latency` |
+| 错误率升高 | `resource-community-error-rate` |
+| 热榜异常 | `resource-community-hot-ranking` |
+| RabbitMQ 积压 | `resource-community-rabbitmq-backlog` |
+
+## 工程化能力
+
+项目包含：
+
+- Docker Compose 一键部署
+- Backend / Worker 服务拆分
+- Health Check
+- pprof 性能分析
+- GitHub Actions CI
+- 自动化测试
+- 配置管理
+
+## 项目目录
+
+```text
+resource-community/
 ├── backend/
 │   ├── cmd/
 │   │   └── worker/
-│   ├── config/
-│   ├── internal/
-│   │   ├── app/
-│   │   ├── article/
-│   │   ├── asyncjob/
-│   │   ├── auth/
-│   │   ├── cachekey/
-│   │   ├── comment/
-│   │   ├── favorite/
-│   │   ├── media/
-│   │   ├── points/
-│   │   ├── social/
-│   │   └── worker/
-│   ├── utils/
-│   └── main.go
+│   └── internal/
+│       ├── auth/
+│       ├── article/
+│       ├── comment/
+│       ├── social/
+│       ├── points/
+│       ├── asyncjob/
+│       └── worker/
 ├── frontend/
-│   ├── src/
-│   │   ├── api/
-│   │   ├── router/
-│   │   ├── store/
-│   │   ├── types/
-│   │   └── views/
-├── docs/
-│   ├── observability.md
-│   └── evidence/
 ├── observability/
 │   ├── prometheus/
 │   └── grafana/
 ├── scripts/
-│   └── observability_drill.sh
-├── docker-compose.yml
-└── README.md
+├── docs/
+└── docker-compose.yml
 ```
-
-## 后端模块说明
-
-- `internal/auth`：认证与用户登录
-- `internal/article`：资源发布、列表、详情、最新流、关注流、热榜
-- `internal/comment`：评论相关能力
-- `internal/favorite`：收藏相关能力
-- `internal/points`：积分、签到、解锁、权益兑换
-- `internal/social`：关注关系、关注状态、粉丝/关注统计
-- `internal/media`：文件上传
-- `internal/asyncjob`：异步任务定义与发布
-- `internal/worker`：异步 Worker 消费处理
-- `internal/app`：路由、鉴权、中间件、可观测性
-
-## 核心链路
-
-### 资源互动与热榜
-
-资源浏览、点赞、评论、收藏会影响文章热度：
-
-1. API 接收到用户行为。
-2. 主流程完成必要的同步响应。
-3. 行为事件投递到 RabbitMQ。
-4. Worker 消费任务，更新浏览量、点赞数、积分或 Redis ZSet 热榜分数。
-5. 列表、详情和热榜缓存按需失效或重建。
-
-这种设计让接口响应和后续统计更新解耦，同时保留消息队列异常时的同步兜底逻辑，避免核心流程完全依赖 RabbitMQ。
-
-### RabbitMQ 消息治理
-
-异步 Worker 针对消费失败补充了生产级保护，避免毒丸消息无限重投拖垮队列：
-
-1. 有限重试：处理失败后读取 `x-retry-count` header，未达到上限时重新发布回主队列并确认原消息。
-2. 失败队列：超过 3 次重试后，消息进入 `<queue>.dlq` 失败队列，并写入 `x-failure-reason` 便于后续排查。
-3. 非法消息隔离：JSON 解析失败不进入业务重试，直接归档到失败队列。
-4. 幂等释放：处理失败进入重试或失败队列前释放 Redis `processing` 锁，避免重试消息被幂等逻辑误判为重复并被直接确认。
-
-成功处理的消息会将幂等 key 标记为 `done` 并保留 24 小时，防止重复投递造成积分、热榜或统计重复更新。
-
-### 关注关系与个性化 Feed
-
-项目在资源分发层提供 3 类 Feed：
-
-1. 最新资源流：按发布时间倒序返回公开资源。
-2. 关注流：基于关注作者关系返回 `published` 资源，使用 `created_at + id` 游标分页，并对每个用户做短 TTL 缓存。
-3. 热门资源流：基于 Redis ZSet 热度分数返回热门资源。
-
-关注、取关和作者发布新资源时，会失效关注流缓存，保证关注流内容能及时刷新。
-
-### 资源详情缓存治理
-
-资源详情页使用 Redis 缓存详情主体，但不缓存用户态的解锁结果，避免不同用户之间的权限状态串用。
-
-项目针对资源详情补充了 3 类缓存治理：
-
-1. 空值缓存：不存在的资源 ID 会写入短 TTL 空值，降低恶意或异常 ID 反复穿透 MySQL 的风险。
-2. TTL 抖动：详情缓存写入时对基础过期时间增加随机抖动，避免同一批 key 集中过期造成缓存雪崩。
-3. 热点回源合并：同一资源详情在并发缓存 miss 时，通过 service 内 singleflight 只允许一个请求回源数据库，其余请求等待并复用回源结果。
-
-浏览事件仍按每次详情请求发布到异步队列，singleflight 只合并缓存填充，不合并用户行为事件。
-
-### 可观测性与演练
-
-后端通过 `/metrics` 暴露 HTTP 指标：
-
-- `resource_community_http_requests_total`
-- `resource_community_http_request_duration_seconds`
-
-Prometheus 根据这些指标计算：
-
-- QPS
-- P50 / P95 延迟
-- 非 2xx 错误率
-- 5xx 错误率
-- 路由维度的 QPS 和 P95
-
-Grafana 默认加载 `Resource Community API` 仪表盘。更多说明见 [docs/observability.md](docs/observability.md)。
-
-## 接口清单
-
-### 健康检查
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/healthz` | 否 | 服务健康检查 |
-
-### 账号 `/api/auth`
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| POST | `/login` | 否 | 登录，返回 access_token + refresh_token |
-| POST | `/register` | 否 | 注册 |
-| POST | `/refresh` | 否 | 刷新 access_token |
-| POST | `/logout` | JWT | 登出 |
-
-### 资源 `/api/articles`
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/articles` | 否 | 资源列表，支持分页、排序、关键词、标签 |
-| GET | `/articles/hot` | 否 | 热门资源列表 |
-| GET | `/articles/:id` | 否 | 资源详情 |
-| POST | `/articles` | JWT | 发布资源 |
-| POST | `/articles/:id/unlock` | JWT | 积分解锁资源 |
-| GET | `/me/following/articles` | JWT | 关注流，支持 `pageSize`、`beforeCreatedAt`、`beforeId` 游标参数 |
-
-### 点赞 `/api/articles`
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/articles/:id/like` | 否 | 获取点赞计数 |
-| POST | `/articles/:id/like` | JWT | 点赞 |
-
-### 评论 `/api`
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/articles/:id/comments` | 否 | 评论列表 |
-| POST | `/articles/:id/comments` | JWT | 发布评论 |
-| DELETE | `/comments/:id` | JWT | 删除评论 |
-
-### 收藏 `/api`
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| POST | `/articles/:id/favorite` | JWT | 收藏资源 |
-| DELETE | `/articles/:id/favorite` | JWT | 取消收藏 |
-| GET | `/me/favorites` | JWT | 我的收藏列表 |
-
-### 社交 `/api/authors`
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/authors/:id/social-status` | 可选 | 获取作者关注状态、粉丝数、关注数；携带 JWT 时返回当前用户是否已关注 |
-| POST | `/authors/:id/follow` | JWT | 关注作者 |
-| DELETE | `/authors/:id/follow` | JWT | 取消关注作者 |
-
-### 积分 `/api/me`
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/me/points` | JWT | 我的积分摘要 |
-| GET | `/me/points/records` | JWT | 我的积分流水 |
-| POST | `/me/check-in` | JWT | 每日签到 |
-| POST | `/me/points/redeem` | JWT | 兑换权益 |
-
-### 上传 `/api/uploads`
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| POST | `/uploads/cover` | JWT | 上传封面图 |
-| POST | `/uploads/content-images` | JWT | 上传正文配图 |
-
 
 ## 本地运行
 
-项目已提供 `.env.example`：
-
-```bash
-cp .env.example .env
-```
-
-### Docker Compose 启动
+启动：
 
 ```bash
 docker compose up --build
-docker compose up -d
 ```
 
-默认启动：
+服务地址：
 
-- MySQL
-- Redis
-- RabbitMQ
-- Backend
-- Worker
-- Frontend
-- Prometheus
-- Grafana
+| 服务 | 地址 |
+|---|---|
+| Frontend | `http://localhost:5173` |
+| Backend | `http://localhost:8080` |
+| Prometheus | `http://localhost:9091` |
+| Grafana | `http://localhost:3001` |
+| RabbitMQ | `http://localhost:15674` |
 
-访问地址：
+## 后续优化方向
 
-- Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:8080/api`
-- Health Check: `http://localhost:8080/healthz`
-- Metrics: `http://localhost:8080/metrics`
-- Prometheus: `http://localhost:9091`
-- Grafana: `http://localhost:3001`，默认账号 `admin/admin`
-- RabbitMQ 管理台: `http://localhost:15674`
-
-停止：
-
-```bash
-docker compose down
-```
-
-### 分别启动
-
-#### 启动后端
-
-```bash
-cd backend
-go mod download
-go run .
-```
-
-#### 启动 Worker
-
-```bash
-cd backend
-go run ./cmd/worker
-```
-
-#### 启动前端
-
-```bash
-cd frontend
-npm ci
-npm run dev
-```
-
-## 压测演练
-
-启动 Docker Compose 后，可以运行演练脚本生成基础流量和指标报告：
-
-```bash
-scripts/observability_drill.sh --duration 90 --concurrency 12
-```
-
-如果需要让错误率面板有可截图数据，可以加入少量 404 请求：
-
-```bash
-scripts/observability_drill.sh --duration 90 --concurrency 12 --include-error-traffic
-```
-
-报告会生成到：
-
-```text
-docs/evidence/observability-drill-<timestamp>.md
-```
-
-报告包含：
-
-- 本地请求数和错误率
-- 接口维度请求数、非 2xx/失败数、错误率、平均耗时和 P95
-- Prometheus 查询到的 QPS、P50、P95、非 2xx 错误率、5xx 错误率
-- Grafana 截图建议
-- 可关联到 OnCallAgent 的排障案例记录
-
-## 与 OnCallAgent 联动
-
-本项目的 Prometheus 指标和演练报告可作为 OnCallAgent 的实践数据来源：
-
-1. 使用 Grafana/Prometheus 发现接口延迟、错误率或服务不可用问题。
-2. 将社区项目排障文档上传到 OnCallAgent 知识库。
-3. OnCallAgent 通过 Prometheus 工具查询当前活跃告警。
-4. Agent 检索对应排障文档，生成处理建议。
-
-当前适合导入 OnCallAgent 的排障文档包括：
-
-- `resource-community-p95-latency.md`
-- `resource-community-error-rate.md`
-- `resource-community-hot-ranking.md`
-- `resource-community-rabbitmq-backlog.md`
-
-## 环境变量
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `RESOURCE_COMMUNITY_GO_APP_PORT` | `8080` | 后端监听端口 |
-| `RESOURCE_COMMUNITY_GO_ENABLE_PPROF` | `false` | 是否开启 pprof |
-| `RESOURCE_COMMUNITY_GO_SLOW_REQUEST_THRESHOLD_MS` | `500` | 慢请求阈值，单位毫秒 |
-| `RESOURCE_COMMUNITY_GO_DATABASE_DSN` | `resource_community_go:resource_community_go@tcp(mysql:3306)/resource_community_go?charset=utf8mb4&parseTime=True&loc=Local` | MySQL 连接串 |
-| `RESOURCE_COMMUNITY_GO_REDIS_ADDR` | `redis:6379` | Redis 地址 |
-| `RESOURCE_COMMUNITY_GO_REDIS_PASSWORD` | 空 | Redis 密码 |
-| `RESOURCE_COMMUNITY_GO_REDIS_DB` | `0` | Redis DB |
-| `RESOURCE_COMMUNITY_GO_RABBITMQ_URL` | `amqp://guest:guest@rabbitmq:5672/` | RabbitMQ 连接地址 |
-| `RESOURCE_COMMUNITY_GO_RABBITMQ_EXCHANGE` | `resource_community_go.async` | RabbitMQ Exchange |
-| `RESOURCE_COMMUNITY_GO_RABBITMQ_QUEUE` | `resource_community_go.async.jobs` | RabbitMQ Queue |
-| `RESOURCE_COMMUNITY_GO_JWT_SECRET` | `change-me-in-production` | JWT 签名密钥 |
-| `RESOURCE_COMMUNITY_GO_UPLOAD_DIR` | `uploads` | 上传目录 |
-| `VITE_API_BASE_URL` | `http://localhost:3000/api` | 前端 API 基地址 |
-| `GRAFANA_ADMIN_USER` | `admin` | Grafana 管理员用户名 |
-| `GRAFANA_ADMIN_PASSWORD` | `admin` | Grafana 管理员密码 |
-
-详见 `.env.example`。
-
-## 测试
-
-### 后端测试
-
-```bash
-cd backend
-go test ./...
-```
-
-### 前端构建校验
-
-```bash
-cd frontend
-npm run build
-```
-
-### 配置校验
-
-```bash
-docker compose config
-python3 -m json.tool observability/grafana/provisioning/dashboards/resource-community-api.json
-```
-
-### Compose 配置校验
-
-```bash
-docker compose config
-```
-
-
-### CI
-
-当前 CI 包含：
-
-- 后端测试
-- 前端构建
-- Docker Compose 配置校验
-- Docker 镜像构建校验
+- Redis Cluster 支持
+- MySQL 读写分离
+- 分布式链路追踪 OpenTelemetry
+- Kubernetes 部署
+- 自动扩缩容 HPA
+- Agent 自动故障恢复
